@@ -1,3 +1,21 @@
+/*
+	Non-separable 2D, 3D and 4D Filtering with CUDA
+    Copyright (C) <2013>  Anders Eklund, andek034@gmail.com
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 #include "filtering.h"
 #include "cuda.h"
 //#include <cutil_inline.h>
@@ -59,8 +77,8 @@ double Filtering::DoConvolution2DShared()
 	threadsInY = 32;
 
     // Round up to get sufficient number of blocks
-    blocksInX = (int)ceil((float)DATA_W / (float)threadsInX);
-    blocksInY = (int)ceil((float)DATA_H / (float)threadsInY);
+    blocksInX = (int)ceil((float)DATA_W / (float)VALID_RESPONSES_X);
+    blocksInY = (int)ceil((float)DATA_H / (float)VALID_RESPONSES_Y);
 
     dim3 dimGrid  = dim3(blocksInX, blocksInY, 1);
     dim3 dimBlock = dim3(threadsInX, threadsInY, 1);
@@ -69,7 +87,7 @@ double Filtering::DoConvolution2DShared()
     int yBlockDifference = 16;
 
     // Do 2D convolution	
-	Convolution_2D<<<dimGrid, dimBlock>>>(d_Filter_Responses, d_Data, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+	Convolution_2D_Shared<<<dimGrid, dimBlock>>>(d_Filter_Responses, d_Data, DATA_W, DATA_H, FILTER_W, FILTER_H, xBlockDifference, yBlockDifference);
 
 	// Copy result to host
 	cudaMemcpy(h_Filter_Responses, d_Filter_Responses, DATA_W * DATA_H * sizeof(float), cudaMemcpyDeviceToHost);
