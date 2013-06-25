@@ -34,18 +34,18 @@ public:
 
     double DoConvolution2DShared();
 	double DoConvolution2DTexture();
-
+	
 	double DoConvolution3DShared();
 	double DoConvolution3DTexture();
-                  
+	              
 	double DoConvolution4DShared();
-
+	
 private:
 
 
-    //void CopyMonomialFilters(float* h_Monomial_Filter_1, float* h_Monomial_Filter_2, float* h_Monomial_Filter_3, float* h_Monomial_Filter_4, float* h_Monomial_Filter_5, float* h_Monomial_Filter_6, float* h_Monomial_Filter_7, float* h_Monomial_Filter_8, float* h_Monomial_Filter_9, float* h_Monomial_Filter_10, float* h_Monomial_Filter_11, float* h_Monomial_Filter_12, float* h_Monomial_Filter_13, float* h_Monomial_Filter_14, int z, int t, int FILTER_W, int FILTER_H, int FILTER_D);
-    //void CopyDenoisingFilters(float* h_Denoising_Filter_1, float* h_Denoising_Filter_2, float* h_Denoising_Filter_3, float* h_Denoising_Filter_4, float* h_Denoising_Filter_5, float* h_Denoising_Filter_6, float* h_Denoising_Filter_7, float* h_Denoising_Filter_8, float* h_Denoising_Filter_9, float* h_Denoising_Filter_10, float* h_Denoising_Filter_11, int z, int t, int FILTER_W, int FILTER_H, int FILTER_D);
-
+    void Copy3DFilterToConstantMemory(float* h_Filter, int z, int FILTER_W, int FILTER_H);
+	void Copy4DFilterToConstantMemory(float* h_Filter, int z, int t, int FILTER_W, int FILTER_H, int FILTER_D);
+    
 	// Number of dimensions
 	int NDIM;
 
@@ -63,19 +63,26 @@ private:
 
 	int NUMBER_OF_FILTERS;
 
+	bool UNROLLED;
+
 	// Host pointers
 	float	*h_Data;
-	float	*h_Filter_Responses;
-	float	*h_Filters;
+	float	*h_Filter_Response;
+	float	*h_Filter;
 	
 	// Device pointers
-	float	*d_Data;
-	float	*d_Filter_Responses;
+	float	*d_Image, *d_Volume;
+	float	*d_Filter_Response;
 
-	int threadsInX, threadsInY;
-    int blocksInX, blocksInY;
+	cudaArray *d_Image_Array, *d_Volume_Array;
+	cudaExtent	VOLUME_SIZE;
+	cudaChannelFormatDesc floatTex;
 
+	int threadsInX, threadsInY, threadsInZ;
+    int blocksInX, blocksInY, blocksInZ;
+	dim3 dimGrid, dimBlock;
 
+	int xBlockDifference, yBlockDifference;
 };
 
 #endif 
