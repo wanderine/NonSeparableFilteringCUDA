@@ -37,12 +37,12 @@ __device__ __constant__ float c_Filter_3D[17][17][17];
 
 __device__ __constant__ float c_Filter_3x3x3[3][3][3];
 __device__ __constant__ float c_Filter_5x5x5[5][5][5];
-__device__ __constant__ float c_Filter_7x7x7[7][7][7];
-__device__ __constant__ float c_Filter_9x9x9[9][9][9];
-__device__ __constant__ float c_Filter_11x11x11[11][11][11];
-__device__ __constant__ float c_Filter_13x13x13[13][13][13];
-__device__ __constant__ float c_Filter_15x15x15[15][15][15];
-__device__ __constant__ float c_Filter_17x17x17[17][17][17];
+//__device__ __constant__ float c_Filter_7x7x7[7][7][7];
+//__device__ __constant__ float c_Filter_9x9x9[9][9][9];
+//__device__ __constant__ float c_Filter_11x11x11[11][11][11];
+//__device__ __constant__ float c_Filter_13x13x13[13][13][13];
+//__device__ __constant__ float c_Filter_15x15x15[15][15][15];
+//__device__ __constant__ float c_Filter_17x17x17[17][17][17];
 
 __device__ float Conv_2D(float Image[64][96], int y, int x, int FILTER_W, int FILTER_H)
 {
@@ -450,6 +450,18 @@ __global__ void Convolution_2D_Shared(float* Filter_Response, float* Image, int 
          Filter_Response[Get_2D_Index(x+64,y+32,DATA_W)] = Conv_2D(s_Image,threadIdx.y+32+HALO,threadIdx.x+64+HALO,FILTER_H,FILTER_W);
    }
 
+}
+
+__global__ void Add(float* Filter_Response, float* Image, int DATA_W, int DATA_H)
+{
+   int x = blockIdx.x * blockDim.x + threadIdx.x;
+   int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+   if ( (x >= (DATA_W)) || (y >= (DATA_H)) )
+        return;
+
+   //Filter_Response[Get_2D_Index(x,y,DATA_W)] = Image[Get_2D_Index(x,y,DATA_W)] + 43.0f;
+   Filter_Response[Get_2D_Index(x,y,DATA_W)] = 43.0f;
 }
 
 __global__ void Convolution_2D_Shared_Unrolled_7x7(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int xBlockDifference, int yBlockDifference)

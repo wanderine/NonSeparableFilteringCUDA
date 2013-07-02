@@ -17,14 +17,13 @@
 */
 
 #include "filtering.h"
-#include "cuda.h"
-//#include <cutil_inline.h>
 #include "filtering_kernel.cu"
 
+#include <cuda.h>
 #include <helper_functions.h>
 #include <helper_cuda.h>
 
-Filtering::Filtering(int ndim, int dw, int dh, int dd, int dt, int fw, int fh, int fd, int ft, float* input_data, float* output_data, float* filter, int nf)
+Filtering::Filtering(int ndim, int dw, int dh, int dd, int dt, int fw, int fh, int fd, int ft, float* input_data, float* filter, float* output_data, int nf)
 {
 	NDIM = ndim;
     DATA_W = dw;
@@ -38,18 +37,24 @@ Filtering::Filtering(int ndim, int dw, int dh, int dd, int dt, int fw, int fh, i
 	FILTER_T = ft;
 
 	h_Data = input_data;
+	h_Filter = filter;	
 	h_Filter_Response = output_data;
 
-	h_Filter = filter;
 	NUMBER_OF_FILTERS = nf;
+
+	UNROLLED = false;
 }
 
 Filtering::~Filtering()
 {
 }
 
+double Filtering::GetConvolutionTime()
+{
+    return convolution_time;
+}
 
-double Filtering::DoConvolution2DTexture()
+void Filtering::DoConvolution2DTexture()
 {        
 	StopWatchInterface *hTimer = NULL;
 	sdkCreateTimer(&hTimer);
@@ -109,18 +114,17 @@ double Filtering::DoConvolution2DTexture()
 
 	checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&hTimer);
-    double gpuTime = 0.001 * sdkGetTimerValue(&hTimer);
+    convolution_time = 0.001 * sdkGetTimerValue(&hTimer);
     
 	sdkDeleteTimer(&hTimer);
 
     cudaDeviceReset();
-	return gpuTime;
 }
 
 
 
 
-double Filtering::DoConvolution2DShared()
+void Filtering::DoConvolution2DShared()
 {        
 	StopWatchInterface *hTimer = NULL;
 	sdkCreateTimer(&hTimer);
@@ -129,14 +133,12 @@ double Filtering::DoConvolution2DShared()
     sdkResetTimer(&hTimer);
     sdkStartTimer(&hTimer);
 	
-    // Allocate memory for the filter response and the image
-    float *d_Data, *d_Filter_Response;
-	
-	cudaMalloc((void **)&d_Data,  DATA_W * DATA_H * sizeof(float));
+    // Allocate memory for the filter response and the image    
+	cudaMalloc((void **)&d_Image,  DATA_W * DATA_H * sizeof(float));
     cudaMalloc((void **)&d_Filter_Response,  DATA_W * DATA_H * sizeof(float));
 
 	// Copy image to GPU
-	cudaMemcpy(d_Data, h_Data, DATA_W * DATA_H * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_Image, h_Data, DATA_W * DATA_H * sizeof(float), cudaMemcpyHostToDevice);
 
 	// Copy filter coefficients to constant memory
 	cudaMemcpyToSymbol(c_Filter_2D, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
@@ -158,13 +160,13 @@ double Filtering::DoConvolution2DShared()
     // Do 2D convolution	
 	if (!UNROLLED)
 	{
-		Convolution_2D_Shared<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Data, DATA_W, DATA_H, FILTER_W, FILTER_H, xBlockDifference, yBlockDifference);
+		Convolution_2D_Shared<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, FILTER_W, FILTER_H, xBlockDifference, yBlockDifference);
 	}
 	else if (UNROLLED)
 	{
 		if (FILTER_W == 7)
 		{
-			Convolution_2D_Shared_Unrolled_7x7<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Data, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+			Convolution_2D_Shared_Unrolled_7x7<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
 		}
 	}
 
@@ -173,22 +175,64 @@ double Filtering::DoConvolution2DShared()
 	cudaMemcpy(h_Filter_Response, d_Filter_Response, DATA_W * DATA_H * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Free allocated memory
-	cudaFree( d_Data );
+	cudaFree( d_Image );
     cudaFree( d_Filter_Response );
 
 	checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&hTimer);
-    double gpuTime = 0.001 * sdkGetTimerValue(&hTimer);
+    convolution_time = 0.001 * sdkGetTimerValue(&hTimer);
     
 	sdkDeleteTimer(&hTimer);
-
     cudaDeviceReset();
-	return gpuTime;
+}
+
+cudaError_t Filtering::DoConvolution2DShared_()
+{        
+	
+    // Allocate memory for the filter response and the image
+    
+	cudaError_t error3 = cudaMalloc((void **)&d_Image,  DATA_W * DATA_H * sizeof(float));
+    cudaMalloc((void **)&d_Filter_Response,  DATA_W * DATA_H * sizeof(float));
+
+	// Copy image to GPU
+	cudaMemcpy(d_Image, h_Data, DATA_W * DATA_H * sizeof(float), cudaMemcpyHostToDevice);
+	
+	// Copy filter coefficients to constant memory
+	cudaMemcpyToSymbol(c_Filter_2D, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
+
+    // 32 threads along x, 32 along y
+	threadsInX = 32;
+	threadsInY = 32;
+
+    // Round up to get sufficient number of blocks
+    blocksInX = (int)ceil((float)DATA_W / (float)threadsInX);
+    blocksInY = (int)ceil((float)DATA_H / (float)threadsInY);
+
+    dimGrid  = dim3(blocksInX, blocksInY, 1);
+    dimBlock = dim3(threadsInX, threadsInY, 1);
+
+	xBlockDifference = 16;
+    yBlockDifference = 16;
+
+	//Convolution_2D_Shared<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, FILTER_W, FILTER_H, xBlockDifference, yBlockDifference);
+
+	cudaMemset(d_Filter_Response, 500, DATA_W * DATA_H * sizeof(float));
+	
+	// Copy result to host
+	//cudaError_t error3 = cudaMemcpy(h_Filter_Response, d_Filter_Response, DATA_W * DATA_H * sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(h_Filter_Response, d_Filter_Response, DATA_W * DATA_H * sizeof(float), cudaMemcpyDeviceToHost);
+    
+	cudaDeviceSynchronize();
+    
+	// Free allocated memory
+	cudaFree( d_Image );
+    cudaFree( d_Filter_Response );
+    	
+	return error3;	
 }
 
 
-
-double Filtering::DoConvolution3DTexture()
+void Filtering::DoConvolution3DTexture()
 {        
 	StopWatchInterface *hTimer = NULL;
 	sdkCreateTimer(&hTimer);
@@ -260,12 +304,10 @@ double Filtering::DoConvolution3DTexture()
 
 	checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&hTimer);
-    double gpuTime = 0.001 * sdkGetTimerValue(&hTimer);
+    convolution_time = 0.001 * sdkGetTimerValue(&hTimer);
     
 	sdkDeleteTimer(&hTimer);
-
     cudaDeviceReset();
-	return gpuTime;
 }
 
 
@@ -343,7 +385,7 @@ void Filtering::Copy4DFilterToConstantMemory(float* h_Filter, int z, int t, int 
 }
 
 
-double Filtering::DoConvolution3DShared()
+void Filtering::DoConvolution3DShared()
 {        
 	StopWatchInterface *hTimer = NULL;
 	sdkCreateTimer(&hTimer);
@@ -402,10 +444,8 @@ double Filtering::DoConvolution3DShared()
 
 	checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&hTimer);
-    double gpuTime = 0.001 * sdkGetTimerValue(&hTimer);
+    convolution_time = 0.001 * sdkGetTimerValue(&hTimer);
     
 	sdkDeleteTimer(&hTimer);
-
     cudaDeviceReset();
-	return gpuTime;
 }

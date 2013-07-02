@@ -1,0 +1,6 @@
+clear all
+clc
+close all
+
+mex FilteringCUDA.cpp -lcudart -lFilteringCUDA -IC:/Program' Files'/NVIDIA' GPU Computing Toolkit'/CUDA/v5.0/include -LC:/Program' Files'/NVIDIA' GPU Computing Toolkit'/CUDA/v5.0/lib/x64 -LC:/
+

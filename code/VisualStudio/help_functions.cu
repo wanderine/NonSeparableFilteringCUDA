@@ -1,7 +1,6 @@
 #ifndef HELP_FUNCTIONS_CU_
 #define HELP_FUNCTIONS_CU_
 
-#define Complex float2
 
 __device__ int Get_2D_Index(int x, int y, int DATA_W)
 {

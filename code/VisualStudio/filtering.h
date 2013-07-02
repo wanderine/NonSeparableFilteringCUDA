@@ -16,9 +16,12 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <cuda.h>
+#include <cuda_runtime.h>
+
 #define HALO 8
 
-#define VALID_RESPONSES_X 48
+#define VALID_RESPONSES_X 80
 #define VALID_RESPONSES_Y 48
 
 #ifndef FILTERING_H_
@@ -29,19 +32,21 @@ class Filtering
 
 public:
 
-    Filtering(int ndim, int dw, int dh, int dd, int dt, int fw, int fh, int fd, int ft, float* input_data, float* output_data, float* filters, int nf);
+    Filtering(int ndim, int dw, int dh, int dd, int dt, int fw, int fh, int fd, int ft, float* input_data, float* filter, float* output_data, int nf);
     ~Filtering();
 
-    double DoConvolution2DShared();
-	double DoConvolution2DTexture();
+    void DoConvolution2DShared();
+	cudaError_t DoConvolution2DShared_();
+	void DoConvolution2DTexture();
 	
-	double DoConvolution3DShared();
-	double DoConvolution3DTexture();
+	void DoConvolution3DShared();
+	void DoConvolution3DTexture();
 	              
-	double DoConvolution4DShared();
+	void DoConvolution4DShared();
+
+	double GetConvolutionTime();
 	
 private:
-
 
     void Copy3DFilterToConstantMemory(float* h_Filter, int z, int FILTER_W, int FILTER_H);
 	void Copy4DFilterToConstantMemory(float* h_Filter, int z, int t, int FILTER_W, int FILTER_H, int FILTER_D);
@@ -83,6 +88,8 @@ private:
 	dim3 dimGrid, dimBlock;
 
 	int xBlockDifference, yBlockDifference;
+
+	double	convolution_time;
 };
 
 #endif 
