@@ -19,10 +19,13 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#define HALO 8
+#define HALO 4
 
-#define VALID_RESPONSES_X 80
-#define VALID_RESPONSES_Y 48
+//#define VALID_RESPONSES_X 80
+//#define VALID_RESPONSES_Y 48
+
+#define VALID_RESPONSES_X 88
+#define VALID_RESPONSES_Y 56
 
 #ifndef FILTERING_H_
 #define FILTERING_H_
@@ -36,7 +39,6 @@ public:
     ~Filtering();
 
     void DoConvolution2DShared();
-	cudaError_t DoConvolution2DShared_();
 	void DoConvolution2DTexture();
 	
 	void DoConvolution3DShared();
@@ -46,6 +48,8 @@ public:
 
 	double GetConvolutionTime();
 	
+	void SetUnrolled(bool);
+
 private:
 
     void Copy3DFilterToConstantMemory(float* h_Filter, int z, int FILTER_W, int FILTER_H);

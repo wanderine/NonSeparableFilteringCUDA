@@ -170,13 +170,45 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     //------------------------
     
     Filtering my_Convolver(NUMBER_OF_DIMENSIONS, DATA_W, DATA_H, DATA_D, DATA_T, FILTER_W, FILTER_H, FILTER_D, FILTER_T, h_Data, h_Filter, h_Filter_Response, 1);
-    //my_Convolver.DoConvolution2DTexture();
-    my_Convolver.DoConvolution2DShared();
-    //int error = my_Convolver.DoConvolution2DShared_();
-    //mexPrintf("Error: %i \n", error);
-    double convolution_time = my_Convolver.GetConvolutionTime();        
-    mexPrintf("Convolution: %f milliseconds \n", convolution_time*);
-             
+    double convolution_time;
+    
+    my_Convolver.SetUnrolled(false);
+    convolution_time = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        my_Convolver.DoConvolution2DTexture();
+        convolution_time += my_Convolver.GetConvolutionTime();        
+    }
+    mexPrintf("Convolution texture: %f milliseconds \n", convolution_time*100);    
+    my_Convolver.SetUnrolled(true);
+    convolution_time = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        my_Convolver.DoConvolution2DTexture();
+        convolution_time += my_Convolver.GetConvolutionTime();        
+    }
+    mexPrintf("Convolution texture unrolled: %f milliseconds \n", convolution_time*100);    
+    my_Convolver.SetUnrolled(false);
+    convolution_time = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        my_Convolver.DoConvolution2DShared();
+        convolution_time += my_Convolver.GetConvolutionTime();        
+    }
+    mexPrintf("Convolution shared: %f milliseconds \n", convolution_time*100);    
+    my_Convolver.SetUnrolled(true);
+    convolution_time = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        my_Convolver.DoConvolution2DShared();
+        convolution_time += my_Convolver.GetConvolutionTime();        
+    }
+    mexPrintf("Convolution shared unrolled: %f milliseconds \n", convolution_time*100);    
+                 
+    my_Convolver.SetUnrolled(false);
+        my_Convolver.DoConvolution2DShared();
+        convolution_time += my_Convolver.GetConvolutionTime();        
+    }
     //------------------------
     
     //unpack_float2double_volumes(h_Filter_Response_double, h_Filter_Response, DATA_W, DATA_H, DATA_D, DATA_T);

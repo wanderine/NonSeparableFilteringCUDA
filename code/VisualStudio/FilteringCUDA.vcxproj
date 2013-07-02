@@ -206,13 +206,13 @@
       <TargetMachinePlatform>64</TargetMachinePlatform>
       <Include>./;../../common/inc;C:\ProgramData\NVIDIA Corporation\CUDA Samples\v5.0\common\inc</Include>
       <Runtime>MT</Runtime>
-      <CodeGeneration>compute_10,sm_10;compute_20,sm_20;compute_30,sm_30;compute_35,sm_35</CodeGeneration>
+      <CodeGeneration>compute_30,sm_30</CodeGeneration>
       <Defines>WIN32</Defines>
       <PtxAsOptionV>true</PtxAsOptionV>
-      <Optimization>InheritFromHost</Optimization>
+      <Optimization>O3</Optimization>
     </CudaCompile>
     <CudaLink>
-      <Optimization>InheritFromProject</Optimization>
+      <Optimization>O3</Optimization>
     </CudaLink>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
