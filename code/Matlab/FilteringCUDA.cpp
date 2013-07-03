@@ -205,7 +205,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     }
     mexPrintf("Convolution shared unrolled: %f milliseconds \n", convolution_time*100);    
                  
-    my_Convolver.SetUnrolled(true);
+    my_Convolver.SetUnrolled(false);
     my_Convolver.DoConvolution2DShared();
 
     //------------------------

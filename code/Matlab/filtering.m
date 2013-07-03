@@ -18,4 +18,4 @@ figure; imagesc(filter_response_gpu)
 
 sum(abs(filter_response_cpu(:) - filter_response_gpu(:)))
 max(abs(filter_response_cpu(:) - filter_response_gpu(:)))
-figure(2); imagesc(abs(filter_response_cpu - filter_response_gpu))
+figure; imagesc(abs(filter_response_cpu - filter_response_gpu))

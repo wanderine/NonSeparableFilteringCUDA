@@ -19,13 +19,13 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#define HALO 4
+#define HALO 8
 
-//#define VALID_RESPONSES_X 80
-//#define VALID_RESPONSES_Y 48
+#define VALID_RESPONSES_X 80
+#define VALID_RESPONSES_Y 48
 
-#define VALID_RESPONSES_X 88
-#define VALID_RESPONSES_Y 56
+//#define VALID_RESPONSES_X 88
+//#define VALID_RESPONSES_Y 56
 
 #ifndef FILTERING_H_
 #define FILTERING_H_
@@ -35,7 +35,10 @@ class Filtering
 
 public:
 
-    Filtering(int ndim, int dw, int dh, int dd, int dt, int fw, int fh, int fd, int ft, float* input_data, float* filter, float* output_data, int nf);
+	Filtering(int dw, int dh, int fw, int fh, float* input_data, float* filter, float* output_data);
+	Filtering(int dw, int dh, int dd, int fw, int fh, int fd, float* input_data, float* filter, float* output_data);
+    Filtering(int dw, int dh, int dd, int dt, int fw, int fh, int fd, int ft, float* input_data, float* filter, float* output_data);
+	
     ~Filtering();
 
     void DoConvolution2DShared();
