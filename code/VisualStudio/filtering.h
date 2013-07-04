@@ -19,13 +19,13 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#define HALO 8
+#define HALO 4
 
-#define VALID_RESPONSES_X 80
-#define VALID_RESPONSES_Y 48
+//#define VALID_RESPONSES_X 80
+//#define VALID_RESPONSES_Y 48
 
-//#define VALID_RESPONSES_X 88
-//#define VALID_RESPONSES_Y 56
+#define VALID_RESPONSES_X 88
+#define VALID_RESPONSES_Y 56
 
 #ifndef FILTERING_H_
 #define FILTERING_H_
@@ -43,11 +43,14 @@ public:
 
     void DoConvolution2DShared();
 	void DoConvolution2DTexture();
-	
+	void DoFiltering2DFFT();
+
 	void DoConvolution3DShared();
 	void DoConvolution3DTexture();
-	              
+	void DoFiltering3DFFT();              
+
 	void DoConvolution4DShared();
+	void DoFiltering4DFFT();
 
 	double GetConvolutionTime();
 	
@@ -56,7 +59,9 @@ public:
 private:
 
     void Copy3DFilterToConstantMemory(float* h_Filter, int z, int FILTER_W, int FILTER_H);
+	void Copy3DFilterToConstantMemoryUnrolled(float* h_Filter, int z, int FILTER_W, int FILTER_H);
 	void Copy4DFilterToConstantMemory(float* h_Filter, int z, int t, int FILTER_W, int FILTER_H, int FILTER_D);
+	void Copy4DFilterToConstantMemoryUnrolled(float* h_Filter, int z, int t, int FILTER_W, int FILTER_H, int FILTER_D);
     
 	// Number of dimensions
 	int NDIM;
@@ -93,8 +98,6 @@ private:
 	int threadsInX, threadsInY, threadsInZ;
     int blocksInX, blocksInY, blocksInZ;
 	dim3 dimGrid, dimBlock;
-
-	int xBlockDifference, yBlockDifference;
 
 	double	convolution_time;
 };

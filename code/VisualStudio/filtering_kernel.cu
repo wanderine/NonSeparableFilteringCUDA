@@ -22,7 +22,7 @@
 #include "filtering.h"
 #include "help_functions.cu"
 
-__device__ __constant__ float c_Filter_2D[17][17];
+__device__ __constant__ float c_Filter_2D[9][9];
 __device__ __constant__ float c_Filter_3x3[3][3];
 __device__ __constant__ float c_Filter_5x5[5][5];
 __device__ __constant__ float c_Filter_7x7[7][7];
@@ -33,16 +33,64 @@ __device__ __constant__ float c_Filter_15x15[15][15];
 __device__ __constant__ float c_Filter_17x17[17][17];
 
 
-__device__ __constant__ float c_Filter_3D[17][17][17];
+__device__ __constant__ float c_Filter_3D[9][9][9];
 
 __device__ __constant__ float c_Filter_3x3x3[3][3][3];
 __device__ __constant__ float c_Filter_5x5x5[5][5][5];
-//__device__ __constant__ float c_Filter_7x7x7[7][7][7];
-//__device__ __constant__ float c_Filter_9x9x9[9][9][9];
+__device__ __constant__ float c_Filter_7x7x7[7][7][7];
+__device__ __constant__ float c_Filter_9x9x9[9][9][9];
 //__device__ __constant__ float c_Filter_11x11x11[11][11][11];
 //__device__ __constant__ float c_Filter_13x13x13[13][13][13];
 //__device__ __constant__ float c_Filter_15x15x15[15][15][15];
 //__device__ __constant__ float c_Filter_17x17x17[17][17][17];
+
+
+__global__ void MultiplyAndNormalize2D(float2 *d_Volume, float2 *d_Filter, int DATA_W, int DATA_H)
+{	
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+	
+	if (x < DATA_W && y < DATA_H)
+    {
+		int idx = x + y * DATA_W;
+	    const float q = 1.0f / (float)(DATA_W * DATA_H);
+
+		float2 a,b;
+		float2 result;
+
+		a = d_Volume[idx];
+		b = d_Filter[idx];
+
+    	result.x = q * (a.x * b.x - a.y * b.y);
+		result.y = q * (a.y * b.x + a.x * b.y);
+
+		d_Volume[idx] = result;
+    }
+}
+
+__global__ void MultiplyAndNormalize3D(float2 *d_Volume, float2 *d_Filter, int DATA_W, int DATA_H, int DATA_D)
+{	
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+	int z = blockIdx.z * blockDim.z + threadIdx.z;
+	
+	if (x < DATA_W && y < DATA_H && z < DATA_D)
+    {
+		int idx = x + y * DATA_W + z * DATA_W * DATA_H;
+	    const float q = 1.0f / (float)(DATA_W * DATA_H * DATA_D);
+
+		float2 a,b;
+		float2 result;
+
+		a = d_Volume[idx];
+		b = d_Filter[idx];
+
+    	result.x = q * (a.x * b.x - a.y * b.y);
+		result.y = q * (a.y * b.x + a.x * b.y);
+
+		d_Volume[idx] = result;
+    }
+}
 
 __device__ float Conv_2D(float Image[64][96], int y, int x, int FILTER_W, int FILTER_H)
 {
@@ -3345,13 +3393,10 @@ __global__ void Convolution_2D_Texture_Unrolled_17x17(float* Filter_Response, in
 
 
 
-__global__ void Convolution_2D_Shared(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int FILTER_W, int FILTER_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int FILTER_W, int FILTER_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference)) )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -3362,9 +3407,6 @@ __global__ void Convolution_2D_Shared(float* Filter_Response, float* Image, int 
    s_Image[threadIdx.y + 32][threadIdx.x]      = 0.0f;
    s_Image[threadIdx.y + 32][threadIdx.x + 32] = 0.0f;
    s_Image[threadIdx.y + 32][threadIdx.x + 64] = 0.0f;
-
-   //if ( (x >= DATA_W) || (y >= DATA_H) )
-   //     return;
 
    // Read data into shared memory
 
@@ -3422,13 +3464,10 @@ __global__ void Convolution_2D_Shared(float* Filter_Response, float* Image, int 
 
 }
 
-__global__ void Convolution_2D_Shared_Unrolled_3x3(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_Unrolled_3x3(float* Filter_Response, float* Image, int DATA_W, int DATA_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference)) )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -3495,13 +3534,10 @@ __global__ void Convolution_2D_Shared_Unrolled_3x3(float* Filter_Response, float
    }
 }
 
-__global__ void Convolution_2D_Shared_Unrolled_5x5(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_Unrolled_5x5(float* Filter_Response, float* Image, int DATA_W, int DATA_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference)) )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -3569,13 +3605,10 @@ __global__ void Convolution_2D_Shared_Unrolled_5x5(float* Filter_Response, float
 }
 
 
-__global__ void Convolution_2D_Shared_Unrolled_7x7(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_Unrolled_7x7(float* Filter_Response, float* Image, int DATA_W, int DATA_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference)) )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -3642,13 +3675,10 @@ __global__ void Convolution_2D_Shared_Unrolled_7x7(float* Filter_Response, float
    }
 }
 
-__global__ void Convolution_2D_Shared_Unrolled_9x9(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_Unrolled_9x9(float* Filter_Response, float* Image, int DATA_W, int DATA_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference)) )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -3716,13 +3746,10 @@ __global__ void Convolution_2D_Shared_Unrolled_9x9(float* Filter_Response, float
 }
 
 
-__global__ void Convolution_2D_Shared_Unrolled_11x11(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_Unrolled_11x11(float* Filter_Response, float* Image, int DATA_W, int DATA_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference)) )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -3789,13 +3816,10 @@ __global__ void Convolution_2D_Shared_Unrolled_11x11(float* Filter_Response, flo
    }
 }
 
-__global__ void Convolution_2D_Shared_Unrolled_13x13(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_Unrolled_13x13(float* Filter_Response, float* Image, int DATA_W, int DATA_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference)) )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -3862,13 +3886,10 @@ __global__ void Convolution_2D_Shared_Unrolled_13x13(float* Filter_Response, flo
    }
 }
 
-__global__ void Convolution_2D_Shared_Unrolled_15x15(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_Unrolled_15x15(float* Filter_Response, float* Image, int DATA_W, int DATA_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference)) )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -3936,13 +3957,10 @@ __global__ void Convolution_2D_Shared_Unrolled_15x15(float* Filter_Response, flo
 }	
 
 
-__global__ void Convolution_2D_Shared_Unrolled_17x17(float* Filter_Response, float* Image, int DATA_W, int DATA_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_Unrolled_17x17(float* Filter_Response, float* Image, int DATA_W, int DATA_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference)) )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -4010,14 +4028,11 @@ __global__ void Convolution_2D_Shared_Unrolled_17x17(float* Filter_Response, flo
 }
 
 
-__global__ void Convolution_2D_Shared_For_3D(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D, int FILTER_W, int FILTER_H, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_For_3D(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D, int FILTER_W, int FILTER_H)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
    int z = blockIdx.z * blockDim.z + threadIdx.z;
-
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference))  )
-        return;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -4088,14 +4103,159 @@ __global__ void Convolution_2D_Shared_For_3D(float* Filter_Response, float* Imag
 
 }
 
-__global__ void Convolution_2D_Shared_For_3D_Unrolled_7x7(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D, int xBlockDifference, int yBlockDifference)
+__global__ void Convolution_2D_Shared_For_3D_Unrolled_3x3(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D)
 {
    int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
    int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
    int z = blockIdx.z * blockDim.z + threadIdx.z;
 
-   if ( (x >= (DATA_W + xBlockDifference)) || (y >= (DATA_H + yBlockDifference))  )
-        return;
+   __shared__ float s_Image[64][96]; // y, x
+
+   // Reset shared memory
+   s_Image[threadIdx.y][threadIdx.x]           = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 32]      = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 64]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 32] = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 64] = 0.0f;
+
+   // Read data into shared memory
+
+   if ( ((z + z_offset) >= 0) && ((z + z_offset) < DATA_D) )
+   {
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )   
+         s_Image[threadIdx.y][threadIdx.x] = Image[Get_3D_Index(x-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )
+         s_Image[threadIdx.y][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  ) 
+         s_Image[threadIdx.y][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x] = Image[Get_3D_Index(x-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+   }
+	
+   __syncthreads();   
+
+   // Only threads inside the image do the convolution
+
+   if ( (x < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_3x3(s_Image,threadIdx.y+HALO,threadIdx.x+HALO);
+
+   if ( ((x + 32) < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x+32,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_3x3(s_Image,threadIdx.y+HALO,threadIdx.x+32+HALO);
+
+   if (threadIdx.x < (32 - HALO*2))
+   {
+      if ( ((x + 64) < DATA_W) && (y < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_3x3(s_Image,threadIdx.y+HALO,threadIdx.x+64+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( (x < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_3x3(s_Image,threadIdx.y+32+HALO,threadIdx.x+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( ((x + 32) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+32,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_3x3(s_Image,threadIdx.y+32+HALO,threadIdx.x+32+HALO);		
+   } 
+
+   if ( (threadIdx.x < (32 - HALO*2)) && (threadIdx.y < (32 - HALO*2)) )
+   {
+      if ( ((x + 64) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_3x3(s_Image,threadIdx.y+32+HALO,threadIdx.x+64+HALO);
+   }
+}
+
+__global__ void Convolution_2D_Shared_For_3D_Unrolled_5x5(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D)
+{
+   int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
+   int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
+   int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+   __shared__ float s_Image[64][96]; // y, x
+
+   // Reset shared memory
+   s_Image[threadIdx.y][threadIdx.x]           = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 32]      = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 64]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 32] = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 64] = 0.0f;
+
+   // Read data into shared memory
+
+   if ( ((z + z_offset) >= 0) && ((z + z_offset) < DATA_D) )
+   {
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )   
+         s_Image[threadIdx.y][threadIdx.x] = Image[Get_3D_Index(x-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )
+         s_Image[threadIdx.y][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  ) 
+         s_Image[threadIdx.y][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x] = Image[Get_3D_Index(x-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+   }
+	
+   __syncthreads();   
+
+   // Only threads inside the image do the convolution
+
+   if ( (x < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_5x5(s_Image,threadIdx.y+HALO,threadIdx.x+HALO);
+
+   if ( ((x + 32) < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x+32,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_5x5(s_Image,threadIdx.y+HALO,threadIdx.x+32+HALO);
+
+   if (threadIdx.x < (32 - HALO*2))
+   {
+      if ( ((x + 64) < DATA_W) && (y < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_5x5(s_Image,threadIdx.y+HALO,threadIdx.x+64+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( (x < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_5x5(s_Image,threadIdx.y+32+HALO,threadIdx.x+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( ((x + 32) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+32,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_5x5(s_Image,threadIdx.y+32+HALO,threadIdx.x+32+HALO);		
+   } 
+
+   if ( (threadIdx.x < (32 - HALO*2)) && (threadIdx.y < (32 - HALO*2)) )
+   {
+      if ( ((x + 64) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_5x5(s_Image,threadIdx.y+32+HALO,threadIdx.x+64+HALO);
+   }
+}
+
+__global__ void Convolution_2D_Shared_For_3D_Unrolled_7x7(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D)
+{
+   int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
+   int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
+   int z = blockIdx.z * blockDim.z + threadIdx.z;
 
    __shared__ float s_Image[64][96]; // y, x
 
@@ -4165,6 +4325,379 @@ __global__ void Convolution_2D_Shared_For_3D_Unrolled_7x7(float* Filter_Response
    }
 }
 
+__global__ void Convolution_2D_Shared_For_3D_Unrolled_9x9(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D)
+{
+   int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
+   int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
+   int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+   __shared__ float s_Image[64][96]; // y, x
+
+   // Reset shared memory
+   s_Image[threadIdx.y][threadIdx.x]           = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 32]      = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 64]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 32] = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 64] = 0.0f;
+
+   // Read data into shared memory
+
+   if ( ((z + z_offset) >= 0) && ((z + z_offset) < DATA_D) )
+   {
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )   
+         s_Image[threadIdx.y][threadIdx.x] = Image[Get_3D_Index(x-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )
+         s_Image[threadIdx.y][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  ) 
+         s_Image[threadIdx.y][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x] = Image[Get_3D_Index(x-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+   }
+	
+   __syncthreads();   
+
+   // Only threads inside the image do the convolution
+
+   if ( (x < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_9x9(s_Image,threadIdx.y+HALO,threadIdx.x+HALO);
+
+   if ( ((x + 32) < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x+32,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_9x9(s_Image,threadIdx.y+HALO,threadIdx.x+32+HALO);
+
+   if (threadIdx.x < (32 - HALO*2))
+   {
+      if ( ((x + 64) < DATA_W) && (y < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_9x9(s_Image,threadIdx.y+HALO,threadIdx.x+64+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( (x < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_9x9(s_Image,threadIdx.y+32+HALO,threadIdx.x+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( ((x + 32) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+32,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_9x9(s_Image,threadIdx.y+32+HALO,threadIdx.x+32+HALO);		
+   } 
+
+   if ( (threadIdx.x < (32 - HALO*2)) && (threadIdx.y < (32 - HALO*2)) )
+   {
+      if ( ((x + 64) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_9x9(s_Image,threadIdx.y+32+HALO,threadIdx.x+64+HALO);
+   }
+}
+
+__global__ void Convolution_2D_Shared_For_3D_Unrolled_11x11(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D)
+{
+   int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
+   int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
+   int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+   __shared__ float s_Image[64][96]; // y, x
+
+   // Reset shared memory
+   s_Image[threadIdx.y][threadIdx.x]           = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 32]      = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 64]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 32] = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 64] = 0.0f;
+
+   // Read data into shared memory
+
+   if ( ((z + z_offset) >= 0) && ((z + z_offset) < DATA_D) )
+   {
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )   
+         s_Image[threadIdx.y][threadIdx.x] = Image[Get_3D_Index(x-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )
+         s_Image[threadIdx.y][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  ) 
+         s_Image[threadIdx.y][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x] = Image[Get_3D_Index(x-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+   }
+	
+   __syncthreads();   
+
+   // Only threads inside the image do the convolution
+
+   if ( (x < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_11x11(s_Image,threadIdx.y+HALO,threadIdx.x+HALO);
+
+   if ( ((x + 32) < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x+32,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_11x11(s_Image,threadIdx.y+HALO,threadIdx.x+32+HALO);
+
+   if (threadIdx.x < (32 - HALO*2))
+   {
+      if ( ((x + 64) < DATA_W) && (y < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_11x11(s_Image,threadIdx.y+HALO,threadIdx.x+64+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( (x < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_11x11(s_Image,threadIdx.y+32+HALO,threadIdx.x+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( ((x + 32) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+32,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_11x11(s_Image,threadIdx.y+32+HALO,threadIdx.x+32+HALO);		
+   } 
+
+   if ( (threadIdx.x < (32 - HALO*2)) && (threadIdx.y < (32 - HALO*2)) )
+   {
+      if ( ((x + 64) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_11x11(s_Image,threadIdx.y+32+HALO,threadIdx.x+64+HALO);
+   }
+}
+
+
+__global__ void Convolution_2D_Shared_For_3D_Unrolled_13x13(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D)
+{
+   int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
+   int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
+   int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+   __shared__ float s_Image[64][96]; // y, x
+
+   // Reset shared memory
+   s_Image[threadIdx.y][threadIdx.x]           = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 32]      = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 64]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 32] = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 64] = 0.0f;
+
+   // Read data into shared memory
+
+   if ( ((z + z_offset) >= 0) && ((z + z_offset) < DATA_D) )
+   {
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )   
+         s_Image[threadIdx.y][threadIdx.x] = Image[Get_3D_Index(x-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )
+         s_Image[threadIdx.y][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  ) 
+         s_Image[threadIdx.y][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x] = Image[Get_3D_Index(x-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+   }
+	
+   __syncthreads();   
+
+   // Only threads inside the image do the convolution
+
+   if ( (x < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_13x13(s_Image,threadIdx.y+HALO,threadIdx.x+HALO);
+
+   if ( ((x + 32) < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x+32,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_13x13(s_Image,threadIdx.y+HALO,threadIdx.x+32+HALO);
+
+   if (threadIdx.x < (32 - HALO*2))
+   {
+      if ( ((x + 64) < DATA_W) && (y < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_13x13(s_Image,threadIdx.y+HALO,threadIdx.x+64+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( (x < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_13x13(s_Image,threadIdx.y+32+HALO,threadIdx.x+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( ((x + 32) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+32,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_13x13(s_Image,threadIdx.y+32+HALO,threadIdx.x+32+HALO);		
+   } 
+
+   if ( (threadIdx.x < (32 - HALO*2)) && (threadIdx.y < (32 - HALO*2)) )
+   {
+      if ( ((x + 64) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_13x13(s_Image,threadIdx.y+32+HALO,threadIdx.x+64+HALO);
+   }
+}
+
+
+__global__ void Convolution_2D_Shared_For_3D_Unrolled_15x15(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D)
+{
+   int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
+   int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
+   int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+   __shared__ float s_Image[64][96]; // y, x
+
+   // Reset shared memory
+   s_Image[threadIdx.y][threadIdx.x]           = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 32]      = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 64]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 32] = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 64] = 0.0f;
+
+   // Read data into shared memory
+
+   if ( ((z + z_offset) >= 0) && ((z + z_offset) < DATA_D) )
+   {
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )   
+         s_Image[threadIdx.y][threadIdx.x] = Image[Get_3D_Index(x-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )
+         s_Image[threadIdx.y][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  ) 
+         s_Image[threadIdx.y][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x] = Image[Get_3D_Index(x-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+   }
+	
+   __syncthreads();   
+
+   // Only threads inside the image do the convolution
+
+   if ( (x < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_15x15(s_Image,threadIdx.y+HALO,threadIdx.x+HALO);
+
+   if ( ((x + 32) < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x+32,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_15x15(s_Image,threadIdx.y+HALO,threadIdx.x+32+HALO);
+
+   if (threadIdx.x < (32 - HALO*2))
+   {
+      if ( ((x + 64) < DATA_W) && (y < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_15x15(s_Image,threadIdx.y+HALO,threadIdx.x+64+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( (x < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_15x15(s_Image,threadIdx.y+32+HALO,threadIdx.x+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( ((x + 32) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+32,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_15x15(s_Image,threadIdx.y+32+HALO,threadIdx.x+32+HALO);		
+   } 
+
+   if ( (threadIdx.x < (32 - HALO*2)) && (threadIdx.y < (32 - HALO*2)) )
+   {
+      if ( ((x + 64) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_15x15(s_Image,threadIdx.y+32+HALO,threadIdx.x+64+HALO);
+   }
+}
+
+__global__ void Convolution_2D_Shared_For_3D_Unrolled_17x17(float* Filter_Response, float* Image, int z_offset, int DATA_W, int DATA_H, int DATA_D)
+{
+   int x = blockIdx.x * VALID_RESPONSES_X + threadIdx.x;
+   int y = blockIdx.y * VALID_RESPONSES_Y + threadIdx.y;
+   int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+   __shared__ float s_Image[64][96]; // y, x
+
+   // Reset shared memory
+   s_Image[threadIdx.y][threadIdx.x]           = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 32]      = 0.0f;
+   s_Image[threadIdx.y][threadIdx.x + 64]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x]      = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 32] = 0.0f;
+   s_Image[threadIdx.y + 32][threadIdx.x + 64] = 0.0f;
+
+   // Read data into shared memory
+
+   if ( ((z + z_offset) >= 0) && ((z + z_offset) < DATA_D) )
+   {
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )   
+         s_Image[threadIdx.y][threadIdx.x] = Image[Get_3D_Index(x-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  )
+         s_Image[threadIdx.y][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y-HALO) >= 0) && ((y-HALO) < DATA_H)  ) 
+         s_Image[threadIdx.y][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x-HALO) >= 0) && ((x-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x] = Image[Get_3D_Index(x-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+32-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 32] = Image[Get_3D_Index(x+32-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+
+      if ( ((x+64-HALO) < DATA_W) && ((y+32-HALO) < DATA_H)  )
+         s_Image[threadIdx.y + 32][threadIdx.x + 64] = Image[Get_3D_Index(x+64-HALO,y+32-HALO,z+z_offset,DATA_W,DATA_H)];
+   }
+	
+   __syncthreads();   
+
+   // Only threads inside the image do the convolution
+
+   if ( (x < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_17x17(s_Image,threadIdx.y+HALO,threadIdx.x+HALO);
+
+   if ( ((x + 32) < DATA_W) && (y < DATA_H) )
+      Filter_Response[Get_3D_Index(x+32,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_17x17(s_Image,threadIdx.y+HALO,threadIdx.x+32+HALO);
+
+   if (threadIdx.x < (32 - HALO*2))
+   {
+      if ( ((x + 64) < DATA_W) && (y < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_17x17(s_Image,threadIdx.y+HALO,threadIdx.x+64+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( (x < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_17x17(s_Image,threadIdx.y+32+HALO,threadIdx.x+HALO);
+   }
+
+   if (threadIdx.y < (32 - HALO*2))
+   {
+      if ( ((x + 32) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+32,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_17x17(s_Image,threadIdx.y+32+HALO,threadIdx.x+32+HALO);		
+   } 
+
+   if ( (threadIdx.x < (32 - HALO*2)) && (threadIdx.y < (32 - HALO*2)) )
+   {
+      if ( ((x + 64) < DATA_W) && ((y + 32) < DATA_H) )
+         Filter_Response[Get_3D_Index(x+64,y+32,z,DATA_W,DATA_H)] += Conv_2D_Unrolled_17x17(s_Image,threadIdx.y+32+HALO,threadIdx.x+64+HALO);
+   }
+}
+
+
 /*
  This function performs non-separable 3D convolution by using texture memory.
 */
@@ -4192,7 +4725,7 @@ __global__ void Convolution_3D_Texture(float* Filter_Response, int DATA_W, int D
          float x_off = -(FILTER_W - 1)/2 + 0.5f;			
          for (int f_x = FILTER_W - 1; f_x >= 0; f_x--)
          {
-            sum += tex3D(tex_Volume,x + x_off,y + y_off,z + z_off) * c_Filter_3D[f_y][f_x][f_z];
+            sum += tex3D(tex_Volume,x + x_off,y + y_off,z + z_off) * c_Filter_3D[f_z][f_y][f_x];
             x_off += 1.0f;
          }
          y_off += 1.0f;
@@ -4203,22 +4736,1290 @@ __global__ void Convolution_3D_Texture(float* Filter_Response, int DATA_W, int D
    Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] = sum;
 }
 
-__global__ void Convolution_3D_Texture_Unrolled_7x7x7(float* Filter_Response, int DATA_W, int DATA_H, int DATA_D)
+__global__ void Convolution_3D_Texture_Unrolled_3x3x3(float* Filter_Response, int DATA_W, int DATA_H, int DATA_D)
 {
-   int x = blockIdx.x * blockDim.x + threadIdx.x;
-   int y = blockIdx.y * blockDim.y + threadIdx.y;
-   int z = blockIdx.z * blockDim.z + threadIdx.z;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
 
-   if (x >= DATA_W || y >= DATA_H || z >= DATA_D)
+    if (x >= DATA_W || y >= DATA_H || z >= DATA_D)
         return;
 
-   float sum = 0.0f;
+    float sum = 0.0f;
 
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_3x3x3[2][2][2];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_3x3x3[1][2][2];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_3x3x3[0][2][2];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_3x3x3[2][1][2];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_3x3x3[1][1][2];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_3x3x3[0][1][2];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_3x3x3[2][0][2];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_3x3x3[1][0][2];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_3x3x3[0][0][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_3x3x3[2][2][1];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_3x3x3[1][2][1];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_3x3x3[0][2][1];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_3x3x3[2][1][1];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_3x3x3[1][1][1];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_3x3x3[0][1][1];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_3x3x3[2][0][1];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_3x3x3[1][0][1];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_3x3x3[0][0][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_3x3x3[2][2][0];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_3x3x3[1][2][0];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_3x3x3[0][2][0];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_3x3x3[2][1][0];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_3x3x3[1][1][0];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_3x3x3[0][1][0];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_3x3x3[2][0][0];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_3x3x3[1][0][0];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_3x3x3[0][0][0];
 
-   Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] = sum;
+    Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] = sum;
 }
 
 
+__global__ void Convolution_3D_Texture_Unrolled_5x5x5(float* Filter_Response, int DATA_W, int DATA_H, int DATA_D)
+{
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= DATA_W || y >= DATA_H || z >= DATA_D)
+        return;
+
+    float sum = 0.0f;
+
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][4][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][4][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][4][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][4][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][4][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][3][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][3][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][3][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][3][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][3][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][2][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][2][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][2][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][2][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][2][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][1][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][1][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][1][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][1][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][1][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][0][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][0][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][0][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][0][4];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][0][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][4][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][4][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][4][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][4][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][4][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][3][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][3][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][3][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][3][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][3][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][2][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][2][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][2][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][2][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][2][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][1][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][1][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][1][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][1][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][1][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][0][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][0][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][0][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][0][3];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][0][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][4][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][4][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][4][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][4][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][4][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][3][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][3][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][3][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][3][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][3][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][2][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][2][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][2][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][2][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][2][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][1][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][1][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][1][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][1][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][1][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][0][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][0][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][0][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][0][2];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][0][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][4][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][4][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][4][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][4][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][4][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][3][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][3][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][3][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][3][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][3][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][2][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][2][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][2][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][2][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][2][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][1][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][1][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][1][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][1][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][1][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][0][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][0][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][0][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][0][1];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][0][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][4][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][4][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][4][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][4][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][4][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][3][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][3][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][3][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][3][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][3][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][2][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][2][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][2][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][2][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][2][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][1][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][1][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][1][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][1][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][1][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_5x5x5[4][0][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_5x5x5[3][0][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_5x5x5[2][0][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_5x5x5[1][0][0];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_5x5x5[0][0][0];
+
+    Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] = sum;
+}
+
+__global__ void Convolution_3D_Texture_Unrolled_7x7x7(float* Filter_Response, int DATA_W, int DATA_H, int DATA_D)
+{
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= DATA_W || y >= DATA_H || z >= DATA_D)
+        return;
+
+    float sum = 0.0f;
+
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][6][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][6][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][6][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][6][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][6][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][6][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][6][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][5][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][5][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][5][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][5][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][5][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][5][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][5][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][4][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][4][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][4][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][4][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][4][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][4][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][4][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][3][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][3][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][3][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][3][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][3][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][3][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][3][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][2][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][2][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][2][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][2][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][2][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][2][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][2][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][1][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][1][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][1][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][1][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][1][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][1][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][1][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][0][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][0][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][0][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][0][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][0][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][0][6];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][0][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][6][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][6][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][6][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][6][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][6][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][6][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][6][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][5][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][5][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][5][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][5][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][5][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][5][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][5][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][4][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][4][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][4][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][4][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][4][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][4][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][4][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][3][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][3][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][3][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][3][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][3][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][3][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][3][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][2][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][2][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][2][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][2][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][2][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][2][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][2][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][1][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][1][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][1][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][1][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][1][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][1][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][1][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][0][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][0][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][0][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][0][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][0][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][0][5];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][0][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][6][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][6][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][6][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][6][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][6][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][6][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][6][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][5][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][5][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][5][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][5][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][5][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][5][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][5][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][4][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][4][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][4][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][4][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][4][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][4][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][4][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][3][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][3][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][3][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][3][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][3][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][3][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][3][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][2][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][2][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][2][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][2][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][2][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][2][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][2][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][1][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][1][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][1][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][1][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][1][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][1][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][1][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][0][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][0][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][0][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][0][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][0][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][0][4];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][0][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][6][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][6][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][6][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][6][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][6][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][6][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][6][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][5][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][5][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][5][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][5][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][5][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][5][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][5][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][4][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][4][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][4][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][4][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][4][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][4][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][4][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][3][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][3][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][3][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][3][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][3][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][3][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][3][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][2][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][2][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][2][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][2][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][2][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][2][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][2][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][1][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][1][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][1][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][1][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][1][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][1][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][1][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][0][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][0][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][0][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][0][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][0][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][0][3];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][0][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][6][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][6][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][6][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][6][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][6][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][6][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][6][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][5][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][5][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][5][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][5][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][5][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][5][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][5][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][4][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][4][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][4][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][4][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][4][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][4][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][4][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][3][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][3][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][3][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][3][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][3][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][3][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][3][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][2][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][2][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][2][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][2][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][2][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][2][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][2][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][1][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][1][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][1][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][1][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][1][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][1][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][1][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][0][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][0][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][0][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][0][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][0][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][0][2];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][0][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][6][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][6][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][6][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][6][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][6][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][6][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][6][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][5][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][5][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][5][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][5][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][5][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][5][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][5][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][4][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][4][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][4][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][4][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][4][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][4][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][4][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][3][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][3][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][3][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][3][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][3][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][3][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][3][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][2][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][2][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][2][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][2][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][2][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][2][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][2][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][1][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][1][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][1][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][1][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][1][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][1][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][1][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][0][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][0][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][0][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][0][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][0][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][0][1];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][0][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][6][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][6][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][6][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][6][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][6][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][6][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][6][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][5][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][5][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][5][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][5][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][5][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][5][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][5][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][4][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][4][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][4][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][4][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][4][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][4][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][4][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][3][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][3][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][3][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][3][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][3][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][3][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][3][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][2][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][2][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][2][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][2][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][2][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][2][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][2][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][1][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][1][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][1][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][1][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][1][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][1][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][1][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_7x7x7[6][0][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_7x7x7[5][0][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_7x7x7[4][0][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_7x7x7[3][0][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_7x7x7[2][0][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_7x7x7[1][0][0];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_7x7x7[0][0][0];
+
+    Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] = sum;
+}
+
+__global__ void Convolution_3D_Texture_Unrolled_9x9x9(float* Filter_Response, int DATA_W, int DATA_H, int DATA_D)
+{
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+    if (x >= DATA_W || y >= DATA_H || z >= DATA_D)
+        return;
+
+    float sum = 0.0f;
+
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][8][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][8][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][8][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][8][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][8][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][8][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][8][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][8][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][8][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][7][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][7][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][7][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][7][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][7][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][7][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][7][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][7][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][7][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][6][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][6][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][6][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][6][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][6][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][6][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][6][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][6][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][6][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][5][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][5][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][5][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][5][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][5][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][5][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][5][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][5][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y - 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][5][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 0.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][4][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][4][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][4][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][4][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][4][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][4][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][4][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][4][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 0.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][4][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][3][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][3][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][3][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][3][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][3][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][3][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][3][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][3][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][3][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][2][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][2][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][2][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][2][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][2][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][2][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][2][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][2][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][2][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][1][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][1][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][1][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][1][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][1][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][1][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][1][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][1][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][1][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][0][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][0][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][0][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][0][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][0][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][0][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][0][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][0][8];
+    sum += tex3D(tex_Volume, x - 4.0f + 0.5f, y + 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][0][8];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][8][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][8][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][8][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][8][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][8][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][8][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][8][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][8][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][8][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][7][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][7][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][7][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][7][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][7][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][7][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][7][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][7][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][7][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][6][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][6][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][6][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][6][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][6][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][6][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][6][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][6][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][6][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][5][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][5][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][5][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][5][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][5][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][5][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][5][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][5][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y - 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][5][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][4][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][4][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][4][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][4][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][4][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][4][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][4][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][4][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 0.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][4][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][3][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][3][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][3][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][3][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][3][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][3][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][3][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][3][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][3][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][2][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][2][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][2][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][2][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][2][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][2][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][2][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][2][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][2][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][1][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][1][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][1][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][1][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][1][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][1][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][1][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][1][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][1][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][0][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][0][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][0][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][0][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][0][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][0][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][0][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][0][7];
+    sum += tex3D(tex_Volume, x - 3.0f + 0.5f, y + 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][0][7];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][8][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][8][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][8][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][8][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][8][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][8][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][8][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][8][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][8][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][7][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][7][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][7][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][7][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][7][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][7][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][7][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][7][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][7][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][6][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][6][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][6][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][6][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][6][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][6][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][6][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][6][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][6][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][5][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][5][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][5][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][5][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][5][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][5][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][5][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][5][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y - 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][5][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][4][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][4][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][4][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][4][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][4][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][4][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][4][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][4][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 0.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][4][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][3][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][3][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][3][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][3][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][3][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][3][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][3][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][3][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][3][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][2][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][2][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][2][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][2][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][2][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][2][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][2][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][2][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][2][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][1][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][1][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][1][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][1][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][1][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][1][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][1][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][1][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][1][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][0][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][0][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][0][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][0][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][0][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][0][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][0][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][0][6];
+    sum += tex3D(tex_Volume, x - 2.0f + 0.5f, y + 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][0][6];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][8][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][8][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][8][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][8][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][8][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][8][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][8][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][8][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][8][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][7][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][7][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][7][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][7][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][7][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][7][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][7][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][7][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][7][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][6][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][6][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][6][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][6][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][6][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][6][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][6][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][6][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][6][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][5][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][5][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][5][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][5][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][5][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][5][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][5][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][5][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y - 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][5][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][4][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][4][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][4][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][4][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][4][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][4][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][4][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][4][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 0.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][4][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][3][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][3][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][3][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][3][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][3][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][3][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][3][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][3][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][3][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][2][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][2][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][2][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][2][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][2][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][2][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][2][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][2][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][2][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][1][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][1][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][1][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][1][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][1][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][1][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][1][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][1][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][1][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][0][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][0][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][0][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][0][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][0][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][0][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][0][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][0][5];
+    sum += tex3D(tex_Volume, x - 1.0f + 0.5f, y + 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][0][5];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][8][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][8][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][8][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][8][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][8][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][8][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][8][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][8][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][8][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][7][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][7][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][7][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][7][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][7][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][7][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][7][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][7][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][7][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][6][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][6][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][6][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][6][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][6][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][6][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][6][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][6][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][6][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][5][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][5][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][5][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][5][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][5][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][5][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][5][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][5][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y - 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][5][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][4][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][4][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][4][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][4][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][4][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][4][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][4][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][4][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 0.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][4][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][3][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][3][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][3][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][3][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][3][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][3][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][3][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][3][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][3][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][2][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][2][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][2][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][2][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][2][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][2][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][2][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][2][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][2][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][1][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][1][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][1][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][1][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][1][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][1][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][1][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][1][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][1][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][0][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][0][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][0][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][0][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][0][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][0][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][0][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][0][4];
+    sum += tex3D(tex_Volume, x + 0.0f + 0.5f, y + 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][0][4];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][8][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][8][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][8][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][8][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][8][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][8][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][8][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][8][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][8][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][7][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][7][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][7][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][7][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][7][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][7][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][7][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][7][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][7][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][6][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][6][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][6][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][6][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][6][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][6][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][6][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][6][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][6][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][5][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][5][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][5][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][5][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][5][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][5][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][5][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][5][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y - 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][5][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][4][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][4][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][4][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][4][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][4][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][4][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][4][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][4][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 0.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][4][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][3][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][3][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][3][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][3][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][3][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][3][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][3][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][3][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][3][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][2][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][2][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][2][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][2][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][2][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][2][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][2][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][2][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][2][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][1][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][1][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][1][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][1][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][1][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][1][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][1][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][1][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][1][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][0][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][0][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][0][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][0][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][0][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][0][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][0][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][0][3];
+    sum += tex3D(tex_Volume, x + 1.0f + 0.5f, y + 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][0][3];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][8][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][8][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][8][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][8][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][8][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][8][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][8][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][8][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][8][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][7][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][7][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][7][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][7][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][7][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][7][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][7][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][7][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][7][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][6][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][6][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][6][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][6][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][6][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][6][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][6][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][6][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][6][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][5][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][5][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][5][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][5][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][5][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][5][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][5][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][5][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y - 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][5][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][4][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][4][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][4][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][4][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][4][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][4][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][4][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][4][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 0.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][4][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][3][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][3][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][3][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][3][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][3][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][3][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][3][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][3][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][3][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][2][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][2][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][2][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][2][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][2][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][2][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][2][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][2][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][2][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][1][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][1][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][1][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][1][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][1][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][1][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][1][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][1][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][1][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][0][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][0][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][0][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][0][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][0][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][0][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][0][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][0][2];
+    sum += tex3D(tex_Volume, x + 2.0f + 0.5f, y + 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][0][2];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][8][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][8][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][8][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][8][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][8][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][8][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][8][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][8][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][8][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][7][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][7][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][7][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][7][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][7][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][7][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][7][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][7][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][7][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][6][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][6][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][6][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][6][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][6][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][6][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][6][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][6][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][6][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][5][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][5][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][5][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][5][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][5][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][5][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][5][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][5][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y - 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][5][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][4][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][4][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][4][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][4][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][4][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][4][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][4][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][4][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 0.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][4][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][3][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][3][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][3][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][3][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][3][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][3][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][3][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][3][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][3][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][2][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][2][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][2][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][2][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][2][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][2][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][2][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][2][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][2][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][1][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][1][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][1][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][1][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][1][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][1][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][1][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][1][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][1][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][0][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][0][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][0][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][0][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][0][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][0][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][0][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][0][1];
+    sum += tex3D(tex_Volume, x + 3.0f + 0.5f, y + 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][0][1];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][8][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][8][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][8][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][8][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][8][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][8][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][8][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][8][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][8][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][7][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][7][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][7][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][7][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][7][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][7][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][7][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][7][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][7][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][6][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][6][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][6][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][6][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][6][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][6][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][6][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][6][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][6][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][5][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][5][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][5][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][5][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][5][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][5][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][5][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][5][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y - 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][5][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 0.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][4][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 0.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][4][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 0.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][4][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 0.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][4][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 0.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][4][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 0.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][4][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 0.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][4][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 0.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][4][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 0.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][4][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 1.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][3][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 1.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][3][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 1.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][3][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 1.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][3][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 1.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][3][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 1.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][3][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 1.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][3][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 1.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][3][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 1.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][3][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 2.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][2][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 2.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][2][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 2.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][2][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 2.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][2][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 2.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][2][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 2.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][2][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 2.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][2][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 2.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][2][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 2.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][2][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 3.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][1][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 3.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][1][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 3.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][1][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 3.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][1][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 3.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][1][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 3.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][1][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 3.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][1][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 3.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][1][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 3.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][1][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 4.0f + 0.5f, z - 4.0f + 0.5f) * c_Filter_9x9x9[8][0][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 4.0f + 0.5f, z - 3.0f + 0.5f) * c_Filter_9x9x9[7][0][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 4.0f + 0.5f, z - 2.0f + 0.5f) * c_Filter_9x9x9[6][0][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 4.0f + 0.5f, z - 1.0f + 0.5f) * c_Filter_9x9x9[5][0][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 4.0f + 0.5f, z + 0.0f + 0.5f) * c_Filter_9x9x9[4][0][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 4.0f + 0.5f, z + 1.0f + 0.5f) * c_Filter_9x9x9[3][0][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 4.0f + 0.5f, z + 2.0f + 0.5f) * c_Filter_9x9x9[2][0][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 4.0f + 0.5f, z + 3.0f + 0.5f) * c_Filter_9x9x9[1][0][0];
+    sum += tex3D(tex_Volume, x + 4.0f + 0.5f, y + 4.0f + 0.5f, z + 4.0f + 0.5f) * c_Filter_9x9x9[0][0][0];
+
+    Filter_Response[Get_3D_Index(x,y,z,DATA_W,DATA_H)] = sum;
+}
 
 #endif
 

@@ -20,6 +20,7 @@
 #include "filtering_kernel.cu"
 
 #include <cuda.h>
+#include <cufft.h>
 #include <helper_functions.h>
 #include <helper_cuda.h>
 
@@ -205,7 +206,6 @@ void Filtering::DoConvolution2DTexture()
 	cudaUnbindTexture( tex_Image );
 	cudaFreeArray( d_Image_Array );
     cudaFree( d_Filter_Response );
-
 	
     cudaDeviceReset();
 }
@@ -223,11 +223,7 @@ void Filtering::DoConvolution2DShared()
     cudaMalloc((void **)&d_Filter_Response,  DATA_W * DATA_H * sizeof(float));
 
 	// Copy image to GPU
-	cudaMemcpy(d_Image, h_Data, DATA_W * DATA_H * sizeof(float), cudaMemcpyHostToDevice);
-
-	// Copy filter coefficients to constant memory
-	cudaMemcpyToSymbol(c_Filter_2D, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
-
+	cudaMemcpy(d_Image, h_Data, DATA_W * DATA_H * sizeof(float), cudaMemcpyHostToDevice);	
 
     // 32 threads along x, 32 along y
 	threadsInX = 32;
@@ -240,9 +236,6 @@ void Filtering::DoConvolution2DShared()
     dimGrid  = dim3(blocksInX, blocksInY, 1);
     dimBlock = dim3(threadsInX, threadsInY, 1);
 
-    xBlockDifference = 16;
-    yBlockDifference = 16;
-
 	checkCudaErrors(cudaDeviceSynchronize());
     sdkResetTimer(&hTimer);
     sdkStartTimer(&hTimer);
@@ -250,7 +243,10 @@ void Filtering::DoConvolution2DShared()
     // Do 2D convolution	
 	if (!UNROLLED)
 	{
-		Convolution_2D_Shared<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, FILTER_W, FILTER_H, xBlockDifference, yBlockDifference);
+		// Copy filter coefficients to constant memory
+		cudaMemcpyToSymbol(c_Filter_2D, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
+		cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+		Convolution_2D_Shared<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, FILTER_W, FILTER_H);
 	}
 	else if (UNROLLED)
 	{
@@ -258,63 +254,64 @@ void Filtering::DoConvolution2DShared()
 		{
 			// Copy filter coefficients to constant memory
 			cudaMemcpyToSymbol(c_Filter_3x3, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
-
-			Convolution_2D_Shared_Unrolled_3x3<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_Unrolled_3x3<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H);
 		}
 		else if (FILTER_W == 5)
 		{
 			// Copy filter coefficients to constant memory
 			cudaMemcpyToSymbol(c_Filter_5x5, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
-
-			Convolution_2D_Shared_Unrolled_5x5<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_Unrolled_5x5<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H);
 		}
 		else if (FILTER_W == 7)
 		{
 			// Copy filter coefficients to constant memory
 			cudaMemcpyToSymbol(c_Filter_7x7, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
-
-			Convolution_2D_Shared_Unrolled_7x7<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_Unrolled_7x7<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H);
 		}
 		else if (FILTER_W == 9)
 		{
 			// Copy filter coefficients to constant memory
 			cudaMemcpyToSymbol(c_Filter_9x9, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
-
-			Convolution_2D_Shared_Unrolled_9x9<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_Unrolled_9x9<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H);
 		}
 		else if (FILTER_W == 11)
 		{
 			// Copy filter coefficients to constant memory
 			cudaMemcpyToSymbol(c_Filter_11x11, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
-
-			Convolution_2D_Shared_Unrolled_11x11<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_Unrolled_11x11<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H);
 		}
 		else if (FILTER_W == 13)
 		{
 			// Copy filter coefficients to constant memory
 			cudaMemcpyToSymbol(c_Filter_13x13, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
-
-			Convolution_2D_Shared_Unrolled_13x13<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_Unrolled_13x13<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H);
 		}
 		else if (FILTER_W == 15)
 		{
 			// Copy filter coefficients to constant memory
 			cudaMemcpyToSymbol(c_Filter_15x15, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
-
-			Convolution_2D_Shared_Unrolled_15x15<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_Unrolled_15x15<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H);
 		}
 		else if (FILTER_W == 17)
 		{
 			// Copy filter coefficients to constant memory
 			cudaMemcpyToSymbol(c_Filter_17x17, h_Filter, FILTER_W * FILTER_H * sizeof(float), 0, cudaMemcpyHostToDevice);
-
-			Convolution_2D_Shared_Unrolled_17x17<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H, xBlockDifference, yBlockDifference);
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_Unrolled_17x17<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Image, DATA_W, DATA_H);
 		}
 	}
 
 	checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&hTimer);
     convolution_time = sdkGetTimerValue(&hTimer);
+	sdkDeleteTimer(&hTimer);
 
 	// Copy result to host
 	cudaMemcpy(h_Filter_Response, d_Filter_Response, DATA_W * DATA_H * sizeof(float), cudaMemcpyDeviceToHost);
@@ -322,9 +319,118 @@ void Filtering::DoConvolution2DShared()
     // Free allocated memory
 	cudaFree( d_Image );
     cudaFree( d_Filter_Response );
-    
-	sdkDeleteTimer(&hTimer);
+    	
     cudaDeviceReset();
+}
+
+
+// This code is only for measuring the time
+void Filtering::DoFiltering2DFFT()
+{
+	StopWatchInterface *hTimer = NULL;
+	sdkCreateTimer(&hTimer);
+
+	cufftHandle FFTplan;
+
+	float2 *d_Image_float2, *d_Filter_float2;
+
+	// Allocate memory for the volume and the filter response
+	cudaMalloc((void **)&d_Image_float2,  DATA_W * DATA_H * sizeof(float2));
+	cudaMalloc((void **)&d_Filter_float2,  DATA_W * DATA_H * sizeof(float2));
+	
+	
+	// Create a plan for FFT
+	cufftPlan2d(&FFTplan, DATA_W, DATA_H, CUFFT_C2C);
+
+	checkCudaErrors(cudaDeviceSynchronize());
+    sdkResetTimer(&hTimer);
+    sdkStartTimer(&hTimer);
+
+	// Transform data and filter
+	cufftExecC2C(FFTplan, (cufftComplex *)d_Image_float2,    (cufftComplex *)d_Image_float2,   CUFFT_FORWARD);
+	cufftExecC2C(FFTplan, (cufftComplex *)d_Filter_float2,   (cufftComplex *)d_Filter_float2,   CUFFT_FORWARD);
+	
+	// Perform multiplication
+	threadsInX = 32;
+	threadsInY = 16;
+	threadsInZ = 1;
+
+    // Round up to get sufficient number of blocks
+    blocksInX = (int)ceil((float)DATA_W / (float)threadsInX);
+    blocksInY = (int)ceil((float)DATA_H / (float)threadsInY);
+	blocksInZ = 1;
+
+    dim3 dimGrid  = dim3(blocksInX, blocksInY, blocksInZ);
+    dim3 dimBlock = dim3(threadsInX, threadsInY, threadsInZ);
+
+	MultiplyAndNormalize2D<<<dimGrid, dimBlock>>>(d_Image_float2, d_Filter_float2, DATA_W, DATA_H);
+
+	// Inverse transform of filter response
+	cufftExecC2C(FFTplan, (cufftComplex *)d_Image_float2,     (cufftComplex *)d_Image_float2,   CUFFT_INVERSE);
+	
+
+	checkCudaErrors(cudaDeviceSynchronize());
+    sdkStopTimer(&hTimer);
+    convolution_time = sdkGetTimerValue(&hTimer);
+	sdkDeleteTimer(&hTimer);
+
+	cudaFree( d_Image_float2 );
+    cudaFree( d_Filter_float2 );	
+	cufftDestroy(FFTplan);
+}
+
+
+// This code is only for measuring the time
+void Filtering::DoFiltering3DFFT()
+{
+	StopWatchInterface *hTimer = NULL;
+	sdkCreateTimer(&hTimer);
+
+	cufftHandle FFTplan;
+
+	float2 *d_Volume_float2, *d_Filter_float2;
+
+	// Allocate memory for the volume and the filter response
+	cudaMalloc((void **)&d_Volume_float2,  DATA_W * DATA_H * DATA_D * sizeof(float2));
+	cudaMalloc((void **)&d_Filter_float2,  DATA_W * DATA_H * DATA_D * sizeof(float2));	
+	
+	// Create a plan for FFT
+	cufftPlan3d(&FFTplan, DATA_W, DATA_H, DATA_D, CUFFT_C2C);
+
+	checkCudaErrors(cudaDeviceSynchronize());
+    sdkResetTimer(&hTimer);
+    sdkStartTimer(&hTimer);
+
+	// Transform data and filter
+	cufftExecC2C(FFTplan, (cufftComplex *)d_Volume_float2,   (cufftComplex *)d_Volume_float2,   CUFFT_FORWARD);
+	cufftExecC2C(FFTplan, (cufftComplex *)d_Filter_float2,   (cufftComplex *)d_Filter_float2,   CUFFT_FORWARD);
+	
+	// Perform multiplication
+	threadsInX = 32;
+	threadsInY = 16;
+	threadsInZ = 1;
+
+    // Round up to get sufficient number of blocks
+    blocksInX = (int)ceil((float)DATA_W / (float)threadsInX);
+    blocksInY = (int)ceil((float)DATA_H / (float)threadsInY);
+	blocksInZ = (int)ceil((float)DATA_D / (float)threadsInZ);
+
+    dim3 dimGrid  = dim3(blocksInX, blocksInY, blocksInZ);
+    dim3 dimBlock = dim3(threadsInX, threadsInY, threadsInZ);
+
+	MultiplyAndNormalize3D<<<dimGrid, dimBlock>>>(d_Volume_float2, d_Filter_float2, DATA_W, DATA_H, DATA_D);
+
+	// Inverse transform of filter response
+	cufftExecC2C(FFTplan, (cufftComplex *)d_Volume_float2,     (cufftComplex *)d_Volume_float2,   CUFFT_INVERSE);
+	
+	checkCudaErrors(cudaDeviceSynchronize());
+    sdkStopTimer(&hTimer);
+    convolution_time = sdkGetTimerValue(&hTimer);
+	sdkDeleteTimer(&hTimer);
+
+	cudaFree( d_Volume_float2 );
+    cudaFree( d_Filter_float2 );	
+	cufftDestroy(FFTplan);
 }
 
 
@@ -333,12 +439,7 @@ void Filtering::DoConvolution3DTexture()
 	StopWatchInterface *hTimer = NULL;
 	sdkCreateTimer(&hTimer);
 
-	checkCudaErrors(cudaDeviceSynchronize());
-    sdkResetTimer(&hTimer);
-    sdkStartTimer(&hTimer);
-
 	floatTex = cudaCreateChannelDesc<float>();
-
 
 	tex_Volume.normalized = false;                       // do not access with normalized texture coordinates
 	tex_Volume.filterMode = cudaFilterModeLinear;        // linear interpolation
@@ -379,18 +480,54 @@ void Filtering::DoConvolution3DTexture()
     dim3 dimGrid  = dim3(blocksInX, blocksInY, blocksInZ);
     dim3 dimBlock = dim3(threadsInX, threadsInY, threadsInZ);
 
+	checkCudaErrors(cudaDeviceSynchronize());
+    sdkResetTimer(&hTimer);
+    sdkStartTimer(&hTimer);
+
     // Do 3D convolution with texture memory	
 	if (!UNROLLED)
 	{
+		// Copy filter coefficients to constant memory
+		cudaMemcpyToSymbol(c_Filter_3D, h_Filter, FILTER_W * FILTER_H * FILTER_D * sizeof(float), 0, cudaMemcpyHostToDevice);
+
 		Convolution_3D_Texture<<<dimGrid, dimBlock>>>(d_Filter_Response, DATA_W, DATA_H, DATA_D, FILTER_W, FILTER_H, FILTER_D);
 	}
 	else if (UNROLLED)
 	{
-		if (FILTER_W == 7)
+		if (FILTER_W == 3)
 		{
+			// Copy filter coefficients to constant memory
+			cudaMemcpyToSymbol(c_Filter_3x3x3, h_Filter, FILTER_W * FILTER_H * FILTER_D * sizeof(float), 0, cudaMemcpyHostToDevice);
+
+			Convolution_3D_Texture_Unrolled_3x3x3<<<dimGrid, dimBlock>>>(d_Filter_Response, DATA_W, DATA_H, DATA_D);
+		}
+		else if (FILTER_W == 5)
+		{
+			// Copy filter coefficients to constant memory
+			cudaMemcpyToSymbol(c_Filter_5x5x5, h_Filter, FILTER_W * FILTER_H * FILTER_D * sizeof(float), 0, cudaMemcpyHostToDevice);
+
+			Convolution_3D_Texture_Unrolled_5x5x5<<<dimGrid, dimBlock>>>(d_Filter_Response, DATA_W, DATA_H, DATA_D);
+		}
+		else if (FILTER_W == 7)
+		{
+			// Copy filter coefficients to constant memory
+			cudaMemcpyToSymbol(c_Filter_7x7x7, h_Filter, FILTER_W * FILTER_H * FILTER_D * sizeof(float), 0, cudaMemcpyHostToDevice);
+
 			Convolution_3D_Texture_Unrolled_7x7x7<<<dimGrid, dimBlock>>>(d_Filter_Response, DATA_W, DATA_H, DATA_D);
 		}
+		else if (FILTER_W == 9)
+		{
+			// Copy filter coefficients to constant memory
+			cudaMemcpyToSymbol(c_Filter_9x9x9, h_Filter, FILTER_W * FILTER_H * FILTER_D * sizeof(float), 0, cudaMemcpyHostToDevice);
+
+			Convolution_3D_Texture_Unrolled_9x9x9<<<dimGrid, dimBlock>>>(d_Filter_Response, DATA_W, DATA_H, DATA_D);
+		}	
 	}
+
+	checkCudaErrors(cudaDeviceSynchronize());
+    sdkStopTimer(&hTimer);
+    convolution_time = sdkGetTimerValue(&hTimer);
+	sdkDeleteTimer(&hTimer);
 
 	// Copy result to host
 	cudaMemcpy(h_Filter_Response, d_Filter_Response, DATA_W * DATA_H * DATA_D * sizeof(float), cudaMemcpyDeviceToHost);
@@ -399,18 +536,18 @@ void Filtering::DoConvolution3DTexture()
 	cudaUnbindTexture( tex_Volume );
 	cudaFreeArray( d_Volume_Array );
     cudaFree( d_Filter_Response );
-
-	checkCudaErrors(cudaDeviceSynchronize());
-    sdkStopTimer(&hTimer);
-    convolution_time = sdkGetTimerValue(&hTimer);
-    
-	sdkDeleteTimer(&hTimer);
+    	
     cudaDeviceReset();
 }
 
 
 
 void Filtering::Copy3DFilterToConstantMemory(float* h_Filter, int z, int FILTER_W, int FILTER_H)
+{
+	cudaMemcpyToSymbol(c_Filter_2D, &h_Filter[z * FILTER_W * FILTER_H], FILTER_W * FILTER_H * sizeof(float));
+}
+
+void Filtering::Copy3DFilterToConstantMemoryUnrolled(float* h_Filter, int z, int FILTER_W, int FILTER_H)
 {
 	if (FILTER_W == 3)
 	{
@@ -447,6 +584,12 @@ void Filtering::Copy3DFilterToConstantMemory(float* h_Filter, int z, int FILTER_
 }
 
 void Filtering::Copy4DFilterToConstantMemory(float* h_Filter, int z, int t, int FILTER_W, int FILTER_H, int FILTER_D)
+{
+	cudaMemcpyToSymbol(c_Filter_2D,  &h_Filter[z * FILTER_W * FILTER_H + t * FILTER_W * FILTER_H * FILTER_D], FILTER_W * FILTER_H * sizeof(float));
+}
+
+
+void Filtering::Copy4DFilterToConstantMemoryUnrolled(float* h_Filter, int z, int t, int FILTER_W, int FILTER_H, int FILTER_D)
 {
 	if (FILTER_W == 3)
 	{
@@ -487,11 +630,7 @@ void Filtering::DoConvolution3DShared()
 {        
 	StopWatchInterface *hTimer = NULL;
 	sdkCreateTimer(&hTimer);
-
-	checkCudaErrors(cudaDeviceSynchronize());
-    sdkResetTimer(&hTimer);
-    sdkStartTimer(&hTimer);
-
+	
     // Allocate memory for the volume and the filter response
 	cudaMalloc((void **)&d_Volume,  DATA_W * DATA_H * DATA_D * sizeof(float));
 	cudaMalloc((void **)&d_Filter_Response,  DATA_W * DATA_H * DATA_D * sizeof(float));
@@ -517,33 +656,349 @@ void Filtering::DoConvolution3DShared()
 
 	// Perform the non-separable 3D convolution by summing 2D convolutions
 
-	xBlockDifference = 16;
-	yBlockDifference = 16;
+	checkCudaErrors(cudaDeviceSynchronize());
+    sdkResetTimer(&hTimer);
+    sdkStartTimer(&hTimer);
 
-	// Loop over slices in filters
-	int z_offset = -(FILTER_D - 1)/2;
-	for (int zz = FILTER_D -1; zz >= 0; zz--)
+	if (!UNROLLED)
 	{
-		// Copy current 2D filter coefficients to constant memory
-		Copy3DFilterToConstantMemory(h_Filter, zz, FILTER_W, FILTER_H); 
-
-		// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
-		cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
-		Convolution_2D_Shared_For_3D<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D, FILTER_W, FILTER_H, xBlockDifference, yBlockDifference);
-		z_offset++;
+		// Loop over slices in filters
+		int z_offset = -(FILTER_D - 1)/2;
+		for (int zz = FILTER_D -1; zz >= 0; zz--)
+		{
+			// Copy current 2D filter coefficients to constant memory
+			Copy3DFilterToConstantMemory(h_Filter, zz, FILTER_W, FILTER_H); 
+	
+			// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_For_3D<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D, FILTER_W, FILTER_H);
+			z_offset++;
+		}
 	}
+	else if (UNROLLED)
+	{
+		if (FILTER_W == 3)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_3x3<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;			
+			}
+		}
+		else if (FILTER_W == 5)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_5x5<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 7)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_7x7<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 9)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_9x9<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 11)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_11x11<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 13)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_13x13<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 15)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_15x15<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 17)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_17x17<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+	}
+
+	checkCudaErrors(cudaDeviceSynchronize());
+    sdkStopTimer(&hTimer);
+    convolution_time = sdkGetTimerValue(&hTimer);
+    sdkDeleteTimer(&hTimer);
 
 	// Copy result to host
 	cudaMemcpy(h_Filter_Response, d_Filter_Response, DATA_W * DATA_H * DATA_D * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Free allocated memory
 	cudaFree( d_Volume );
-    cudaFree( d_Filter_Response );
+    cudaFree( d_Filter_Response );	
+	
+    cudaDeviceReset();
+}
+
+void Filtering::DoConvolution4DShared()
+{        
+	StopWatchInterface *hTimer = NULL;
+	sdkCreateTimer(&hTimer);
+	
+    // Allocate memory for the volume and the filter response
+	cudaMalloc((void **)&d_Volume,  DATA_W * DATA_H * DATA_D * DATA_T * sizeof(float));
+	// Calculate the filter response for one volume at a time
+	cudaMalloc((void **)&d_Filter_Response,  DATA_W * DATA_H * DATA_D * sizeof(float));
+
+	// Copy volume to device
+	cudaMemcpy(d_Volume, h_Data, DATA_W * DATA_H * DATA_D * DATA_T * sizeof(float), cudaMemcpyHostToDevice);
+
+    // 32 threads along x, 32 along y
+	threadsInX = 32;
+	threadsInY = 32;
+	threadsInZ = 1;
+
+    // Round up to get sufficient number of blocks
+    blocksInX = (int)ceil((float)DATA_W / (float)VALID_RESPONSES_X);
+    blocksInY = (int)ceil((float)DATA_H / (float)VALID_RESPONSES_Y);
+	blocksInZ = DATA_D;
+
+    dim3 dimGrid  = dim3(blocksInX, blocksInY, blocksInZ);
+    dim3 dimBlock = dim3(threadsInX, threadsInY, threadsInZ);
+
+	// Reset filter response
+	cudaMemset(d_Filter_Response, 0, DATA_W * DATA_H * DATA_D * sizeof(float));
+
+	// Perform the non-separable 4D convolution by summing 2D convolutions
+
+	checkCudaErrors(cudaDeviceSynchronize());
+    sdkResetTimer(&hTimer);
+    sdkStartTimer(&hTimer);
+
+	if (!UNROLLED)
+	{
+		// Loop over slices in filters
+		int z_offset = -(FILTER_D - 1)/2;
+		for (int zz = FILTER_D -1; zz >= 0; zz--)
+		{
+			// Copy current 2D filter coefficients to constant memory
+			Copy4DFilterToConstantMemory(h_Filter, zz, FILTER_W, FILTER_H); 
+	
+			// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+			cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+			Convolution_2D_Shared_For_3D<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D, FILTER_W, FILTER_H);
+			z_offset++;
+		}
+	}
+	else if (UNROLLED)
+	{
+		if (FILTER_W == 3)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_3x3<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;			
+			}
+		}
+		else if (FILTER_W == 5)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_5x5<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 7)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_7x7<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 9)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_9x9<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 11)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_11x11<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 13)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_13x13<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 15)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_15x15<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+		else if (FILTER_W == 17)
+		{
+			// Loop over slices in filters
+			int z_offset = -(FILTER_D - 1)/2;
+			for (int zz = FILTER_D -1; zz >= 0; zz--)
+			{
+				// Copy current 2D filter coefficients to constant memory
+				Copy3DFilterToConstantMemoryUnrolled(h_Filter, zz, FILTER_W, FILTER_H); 
+		
+				// Do the 2D convolution with the current filter coefficients and increment the result inside the kernel
+				cudaDeviceSetCacheConfig(cudaFuncCachePreferShared);
+				Convolution_2D_Shared_For_3D_Unrolled_17x17<<<dimGrid, dimBlock>>>(d_Filter_Response, d_Volume, z_offset, DATA_W, DATA_H, DATA_D);
+				z_offset++;
+			}
+		}
+	}
 
 	checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&hTimer);
     convolution_time = sdkGetTimerValue(&hTimer);
-    
-	sdkDeleteTimer(&hTimer);
+    sdkDeleteTimer(&hTimer);
+
+	// Copy result to host
+	cudaMemcpy(h_Filter_Response, d_Filter_Response, DATA_W * DATA_H * DATA_D * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Free allocated memory
+	cudaFree( d_Volume );
+    cudaFree( d_Filter_Response );	
+	
     cudaDeviceReset();
 }
