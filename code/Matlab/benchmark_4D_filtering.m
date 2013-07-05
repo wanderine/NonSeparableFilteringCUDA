@@ -12,59 +12,47 @@ close all
 %---------------------------------------------------------------------------------------------------------------------
 
 
-mex Filtering3D.cpp -lcudart -lcufft -lFilteringCUDA -IC:/Program' Files'/NVIDIA' GPU Computing Toolkit'/CUDA/v5.0/include -LC:/Program' Files'/NVIDIA' GPU Computing Toolkit'/CUDA/v5.0/lib/x64 -LC:/users/wande/Documents/Visual' Studio 2010'/Projects/Filtering/x64/Release/ -IC:/users/wande/Documents/Visual' Studio 2010'/Projects/Filtering/
+mex Filtering4D.cpp -lcudart -lcufft -lFilteringCUDA -IC:/Program' Files'/NVIDIA' GPU Computing Toolkit'/CUDA/v5.0/include -LC:/Program' Files'/NVIDIA' GPU Computing Toolkit'/CUDA/v5.0/lib/x64 -LC:/users/wande/Documents/Visual' Studio 2010'/Projects/Filtering/x64/Release/ -IC:/users/wande/Documents/Visual' Studio 2010'/Projects/Filtering/
 
 %%
 % Loop over filter sizes
 
-volume = randn(256,256,256);
+volumes = randn(128,128,128,32);
 
 N = length(3:2:17);
-texture_times = zeros(N,1);
-texture_times_unrolled = zeros(N,1);
 shared_times = zeros(N,1);
 shared_times_unrolled = zeros(N,1);
 fft_times = zeros(N,1);
 megavoxels = zeros(N,1);
 
-sizes = 3:2:17;
-
 % HALO 4
 i = 1;
-for size = 3:2:9
-    filter = randn(size,size,size);
+for filter_size = 3:2:9
+    filter = randn(filter_size,filter_size,filter_size,filter_size);
     filter = filter/sum(abs(filter(:)));    
-    [filter_response_gpu_texture, filter_response_gpu_texture_unrolled, filter_response_gpu_shared, filter_response_gpu_shared_unrolled, time_texture, time_texture_unrolled, time_shared, time_shared_unrolled time_fft]  = Filtering3D(volume,filter,1);
-    texture_times(i) = time_texture;
-    texture_times_unrolled(i) = time_texture_unrolled;
+    [filter_response_gpu_shared, filter_response_gpu_shared_unrolled, time_shared, time_shared_unrolled time_fft]  = Filtering4D(volumes,filter,1);
     shared_times(i) = time_shared;
     shared_times_unrolled(i) = time_shared_unrolled;    
     fft_times(i) = time_fft;
-    megavoxels(i) = 256*256*256/1000000;
+    megavoxels(i) = size(volumes,1)*size(volumes,2)*size(volumes,3)*size(volumes,4)/1000000;
     i = i + 1;
 end
 
 
 % HALO 8
-for size = 11:2:17
-    filter = randn(size,size,size);
+for filter_size = 11:2:17
+    filter = randn(filter_size,filter_size,filter_size,filter_size);
     filter = filter/sum(abs(filter(:)));    
-    [filter_response_gpu_texture, filter_response_gpu_texture_unrolled, filter_response_gpu_shared, filter_response_gpu_shared_unrolled, time_texture, time_texture_unrolled, time_shared, time_shared_unrolled time_fft]  = Filtering3D(volume,filter,1);
-    texture_times(i) = time_texture;
-    texture_times_unrolled(i) = time_texture_unrolled;
+    [filter_response_gpu_shared, filter_response_gpu_shared_unrolled, time_shared, time_shared_unrolled time_fft]  = Filtering4D(volumes,filter,1);
     shared_times(i) = time_shared;
     shared_times_unrolled(i) = time_shared_unrolled;    
     fft_times(i) = time_fft;
-    megavoxels(i) = 256*256*256/1000000;
+    megavoxels(i) = size(volumes,1)*size(volumes,2)*size(volumes,3)*size(volumes,4)/1000000;
     i = i + 1;
 end
 
 
 figure
-plot(sizes,megavoxels ./ texture_times * 1000, 'b','LineWidth',2)
-hold on
-plot(sizes,megavoxels ./ texture_times_unrolled * 1000, 'r','LineWidth',2)
-hold on
 plot(sizes,megavoxels ./ shared_times * 1000, 'g','LineWidth',2)
 hold on
 plot(sizes,megavoxels ./ shared_times_unrolled * 1000, 'k','LineWidth',2)
@@ -74,14 +62,14 @@ hold off
 set(gca,'FontSize',15)
 xlabel('Filter size','FontSize',15)
 ylabel('Megavoxels / second','FontSize',15)
-legend('Texture','Texture unrolled','Shared','Shared unrolled','FFT')
+legend('Shared','Shared unrolled','FFT')
 
-print -dpng benchmark_3D_filtering_filter_sizes_volume_size_256x256x256.png
+print -dpng benchmark_4D_filtering_filter_sizes_volume_size_128x128x128x32.png
 
 %%
-% Loop over volume sizes for filter size 7 x 7 x 7
+% Loop over volume sizes for filter size 7 x 7 x 7 x 7
 % HALO 4
-filter = randn(7,7,7);
+filter = randn(7,7,7,7);
 filter = filter/sum(abs(filter(:)));
 
 N = length(64:32:512);
@@ -128,9 +116,9 @@ print -dpng benchmark_3D_filtering_volume_sizes_7x7x7.png
 
 %%
 
-% Loop over volume sizes for filter size 13 x 13 x 13
+% Loop over volume sizes for filter size 11 x 11 x 11 x 11 
 % HALO 8
-filter = randn(13,13,13);
+filter = randn(11,11,11,11);
 filter = filter/sum(abs(filter(:)));
 
 N = length(64:32:512);

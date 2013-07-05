@@ -1,20 +1,20 @@
 /*
-	Non-separable 2D, 3D and 4D Filtering with CUDA
-	Copyright (C) <2013>  Anders Eklund, andek034@gmail.com
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ * Non-separable 2D, 3D and 4D Filtering with CUDA
+ * Copyright (C) <2013>  Anders Eklund, andek034@gmail.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include "mex.h"
 #include "help_functions.cpp"
@@ -104,7 +104,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     
     // Create pointer for volumes to Matlab
     
-    int ARRAY_DIMENSIONS_OUT[2];
+    int ARRAY_DIMENSIONS_OUT[3];
     ARRAY_DIMENSIONS_OUT[0] = DATA_H;
     ARRAY_DIMENSIONS_OUT[1] = DATA_W;
     ARRAY_DIMENSIONS_OUT[2] = DATA_D;
@@ -160,14 +160,14 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     *convolution_time_shared_unrolled = 0.0;
     *convolution_time_fft = 0.0;
     
-    int RUNS = 20;
+    int RUNS = 10;
     
     if (TIMING == 1)
     {
         my_Convolver.SetUnrolled(false);
         for (int i = 0; i < RUNS; i++)
         {
-            //my_Convolver.DoConvolution3DTexture();
+            my_Convolver.DoConvolution3DTexture();
             *convolution_time_texture += my_Convolver.GetConvolutionTime();
         }
         *convolution_time_texture /= (double)RUNS;
@@ -175,7 +175,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         my_Convolver.SetUnrolled(true);
         for (int i = 0; i < RUNS; i++)
         {
-            //my_Convolver.DoConvolution3DTexture();
+            my_Convolver.DoConvolution3DTexture();
             *convolution_time_texture_unrolled += my_Convolver.GetConvolutionTime();
         }
         *convolution_time_texture_unrolled /= (double)RUNS;
@@ -196,29 +196,41 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         }
         *convolution_time_shared_unrolled /= (double)RUNS;
         
-        for (int i = 0; i < RUNS; i++)
+        if (DATA_D < 448)
         {
-            //my_Convolver.DoFiltering3DFFT();
-            *convolution_time_fft += my_Convolver.GetConvolutionTime();
+            for (int i = 0; i < RUNS; i++)
+            {
+                my_Convolver.DoFiltering3DFFT();
+                *convolution_time_fft += my_Convolver.GetConvolutionTime();
+            }
+            *convolution_time_fft /= (double)RUNS;
         }
-        *convolution_time_fft /= (double)RUNS;
     }
-    
-    //-------------------
-    
-    my_Convolver.SetUnrolled(false);
-    //my_Convolver.DoConvolution3DTexture();
-    unpack_float2double_volume(h_Filter_Response_Texture_double, h_Filter_Response, DATA_W, DATA_H, DATA_D);
-    my_Convolver.SetUnrolled(true);
-    //my_Convolver.DoConvolution3DTexture();
-    unpack_float2double_volume(h_Filter_Response_Texture_Unrolled_double, h_Filter_Response, DATA_W, DATA_H, DATA_D);
-    my_Convolver.SetUnrolled(false);
-    my_Convolver.DoConvolution3DShared();
-    unpack_float2double_volume(h_Filter_Response_Shared_double, h_Filter_Response, DATA_W, DATA_H, DATA_D);
-    my_Convolver.SetUnrolled(true);
-    my_Convolver.DoConvolution3DShared();
-    unpack_float2double_volume(h_Filter_Response_Shared_Unrolled_double, h_Filter_Response, DATA_W, DATA_H, DATA_D);
-    
+    else if (TIMING == 0)
+    {        
+        my_Convolver.SetUnrolled(false);
+        my_Convolver.DoConvolution3DTexture();
+        *convolution_time_texture = my_Convolver.GetConvolutionTime();
+        unpack_float2double_volume(h_Filter_Response_Texture_double, h_Filter_Response, DATA_W, DATA_H, DATA_D);
+        
+        my_Convolver.SetUnrolled(true);
+        my_Convolver.DoConvolution3DTexture();
+        *convolution_time_texture_unrolled = my_Convolver.GetConvolutionTime();
+        unpack_float2double_volume(h_Filter_Response_Texture_Unrolled_double, h_Filter_Response, DATA_W, DATA_H, DATA_D);
+        
+        my_Convolver.SetUnrolled(false);
+        my_Convolver.DoConvolution3DShared();
+        *convolution_time_shared = my_Convolver.GetConvolutionTime();
+        unpack_float2double_volume(h_Filter_Response_Shared_double, h_Filter_Response, DATA_W, DATA_H, DATA_D);
+        
+        my_Convolver.SetUnrolled(true);
+        my_Convolver.DoConvolution3DShared();
+        *convolution_time_shared_unrolled = my_Convolver.GetConvolutionTime();
+        unpack_float2double_volume(h_Filter_Response_Shared_Unrolled_double, h_Filter_Response, DATA_W, DATA_H, DATA_D);
+        
+        my_Convolver.DoFiltering3DFFT();
+        *convolution_time_fft = my_Convolver.GetConvolutionTime();
+    }
     
     // Free all the allocated memory on the host
     mxFree(h_Data);

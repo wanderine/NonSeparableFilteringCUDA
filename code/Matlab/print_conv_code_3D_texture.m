@@ -1,5 +1,5 @@
 clc
-FILTER_SIZE = 7;
+FILTER_SIZE = 17;
 
 x_offset = -(FILTER_SIZE - 1)/2;
 for column = FILTER_SIZE - 1:-1:0

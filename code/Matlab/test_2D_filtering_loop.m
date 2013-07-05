@@ -69,3 +69,5 @@ for sx = 64:2048
     i = i + 1;
 end
 
+figure; plot(shared_tot)
+figure; plot(shared_max)

@@ -21,11 +21,15 @@
 
 #define HALO 4
 
+// For a halo of 8
 //#define VALID_RESPONSES_X 80
 //#define VALID_RESPONSES_Y 48
 
+// For a halo of 4
 #define VALID_RESPONSES_X 88
 #define VALID_RESPONSES_Y 56
+
+
 
 #ifndef FILTERING_H_
 #define FILTERING_H_
@@ -88,7 +92,7 @@ private:
 	float	*h_Filter;
 	
 	// Device pointers
-	float	*d_Image, *d_Volume;
+	float	*d_Image, *d_Volume, *d_Volumes;
 	float	*d_Filter_Response;
 
 	cudaArray *d_Image_Array, *d_Volume_Array;
