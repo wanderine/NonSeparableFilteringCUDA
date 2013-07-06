@@ -18,7 +18,7 @@
 %---------------------------------------------------------------------------------------------------------------------
 % README
 % If you run this code in Windows, your graphics driver might stop working
-% for large volumes / large filter sizes. This is not a bug in my code but is due to the
+% for large data sizes / large filter sizes. This is not a bug in my code but is due to the
 % fact that the Nvidia driver thinks that something is wrong if the GPU
 % takes more than 2 seconds to complete a task. This link solved my problem
 % https://forums.geforce.com/default/topic/503962/tdr-fix-here-for-nvidia-driver-crashing-randomly-in-firefox/
