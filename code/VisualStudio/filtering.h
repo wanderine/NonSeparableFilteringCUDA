@@ -19,15 +19,15 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#define HALO 4
+#define HALO 8
 
 // For a halo of 8
-//#define VALID_RESPONSES_X 80
-//#define VALID_RESPONSES_Y 48
+#define VALID_RESPONSES_X 80
+#define VALID_RESPONSES_Y 48
 
 // For a halo of 4
-#define VALID_RESPONSES_X 88
-#define VALID_RESPONSES_Y 56
+//#define VALID_RESPONSES_X 88
+//#define VALID_RESPONSES_Y 56
 
 
 

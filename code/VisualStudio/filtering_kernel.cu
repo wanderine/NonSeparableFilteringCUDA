@@ -22,7 +22,7 @@
 #include "filtering.h"
 #include "help_functions.cu"
 
-__device__ __constant__ float c_Filter_2D[17][17];
+__device__ __constant__ float c_Filter_2D[11][11];
 __device__ __constant__ float c_Filter_3x3[3][3];
 __device__ __constant__ float c_Filter_5x5[5][5];
 __device__ __constant__ float c_Filter_7x7[7][7];

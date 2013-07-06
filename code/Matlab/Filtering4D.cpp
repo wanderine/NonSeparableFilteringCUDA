@@ -1,20 +1,20 @@
 /*
-	Non-separable 2D, 3D and 4D Filtering with CUDA
-	Copyright (C) <2013>  Anders Eklund, andek034@gmail.com
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+ * Non-separable 2D, 3D and 4D Filtering with CUDA
+ * Copyright (C) <2013>  Anders Eklund, andek034@gmail.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include "mex.h"
 #include "help_functions.cpp"
@@ -109,7 +109,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     ARRAY_DIMENSIONS_OUT[1] = DATA_W;
     ARRAY_DIMENSIONS_OUT[2] = DATA_D;
     ARRAY_DIMENSIONS_OUT[3] = DATA_T;
-       
+    
     plhs[0] = mxCreateNumericArray(NUMBER_OF_DIMENSIONS,ARRAY_DIMENSIONS_OUT,mxDOUBLE_CLASS, mxREAL);
     h_Filter_Response_Shared_double = mxGetPr(plhs[0]);
     
@@ -117,7 +117,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     h_Filter_Response_Shared_Unrolled_double = mxGetPr(plhs[1]);
     
     //---------
-        
+    
     plhs[2] = mxCreateDoubleMatrix(1, 1, mxREAL);
     convolution_time_shared = mxGetPr(plhs[2]);
     
@@ -150,7 +150,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     int RUNS = 10;
     
     if (TIMING == 1)
-    {        
+    {
         my_Convolver.SetUnrolled(false);
         for (int i = 0; i < RUNS; i++)
         {
@@ -167,29 +167,31 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
         }
         *convolution_time_shared_unrolled /= (double)RUNS;
         
-        for (int i = 0; i < RUNS; i++)
+        if (DATA_T <= 96)
         {
-            my_Convolver.DoFiltering4DFFT();
-            *convolution_time_fft += my_Convolver.GetConvolutionTime();
+            for (int i = 0; i < RUNS; i++)
+            {
+                my_Convolver.DoFiltering4DFFT();
+                *convolution_time_fft += my_Convolver.GetConvolutionTime();
+            }
+            *convolution_time_fft /= (double)RUNS;
         }
-        *convolution_time_fft /= (double)RUNS;
     }
-    
-    //-------------------
-    
-    my_Convolver.SetUnrolled(false);
-    my_Convolver.DoConvolution4DShared();
-    *convolution_time_shared = my_Convolver.GetConvolutionTime();
-    unpack_float2double_volumes(h_Filter_Response_Shared_double, h_Filter_Response, DATA_W, DATA_H, DATA_D, DATA_T);
-    my_Convolver.SetUnrolled(true);
-    my_Convolver.DoConvolution4DShared();
-    *convolution_time_shared_unrolled = my_Convolver.GetConvolutionTime();
-    unpack_float2double_volumes(h_Filter_Response_Shared_Unrolled_double, h_Filter_Response, DATA_W, DATA_H, DATA_D, DATA_T);
-    
-    my_Convolver.DoFiltering4DFFT();
-    *convolution_time_fft = my_Convolver.GetConvolutionTime();
-    
-    
+    else if (TIMING == 0)
+    {        
+        my_Convolver.SetUnrolled(false);
+        my_Convolver.DoConvolution4DShared();
+        *convolution_time_shared = my_Convolver.GetConvolutionTime();
+        unpack_float2double_volumes(h_Filter_Response_Shared_double, h_Filter_Response, DATA_W, DATA_H, DATA_D, DATA_T);
+     
+        my_Convolver.SetUnrolled(true);
+        my_Convolver.DoConvolution4DShared();
+        *convolution_time_shared_unrolled = my_Convolver.GetConvolutionTime();
+        unpack_float2double_volumes(h_Filter_Response_Shared_Unrolled_double, h_Filter_Response, DATA_W, DATA_H, DATA_D, DATA_T);
+        
+        my_Convolver.DoFiltering4DFFT();
+        *convolution_time_fft = my_Convolver.GetConvolutionTime();        
+    }
     
     
     // Free all the allocated memory on the host
