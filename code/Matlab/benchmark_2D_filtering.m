@@ -43,7 +43,7 @@ shared_times_unrolled = zeros(N,1);
 fft_times = zeros(N,1);
 megapixels = zeros(N,1);
 
-sizes = 3:2:17;
+filter_sizes = 3:2:17;
 
 % HALO 4
 i = 1;
