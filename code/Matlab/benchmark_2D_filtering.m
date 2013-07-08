@@ -120,7 +120,7 @@ for image_size = image_sizes
     shared_times(i) = time_shared;
     shared_times_unrolled(i) = time_shared_unrolled;    
     fft_times(i) = time_fft;
-    megapixels(i) = size*size/1000000;
+    megapixels(i) = image_size*image_size/1000000;
     i = i + 1;
 end
 
@@ -170,7 +170,7 @@ for image_size = image_sizes
     shared_times(i) = time_shared;
     shared_times_unrolled(i) = time_shared_unrolled;    
     fft_times(i) = time_fft;
-    megapixels(i) = size*size/1000000;
+    megapixels(i) = image_size*image_size/1000000;
     i = i + 1;
 end
 
