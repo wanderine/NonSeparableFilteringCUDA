@@ -47,8 +47,8 @@ filter_sizes = 3:2:17;
 
 % HALO 4
 i = 1;
-for size = 3:2:9
-    filter = randn(size,size);
+for filter_size = 3:2:9
+    filter = randn(filter_size,filter_size);
     filter = filter/sum(abs(filter(:)));    
     [filter_response_gpu_texture, filter_response_gpu_texture_unrolled, filter_response_gpu_shared, filter_response_gpu_shared_unrolled, time_texture, time_texture_unrolled, time_shared, time_shared_unrolled, time_fft]  = Filtering2D(image,filter,1);
     texture_times(i) = time_texture;
