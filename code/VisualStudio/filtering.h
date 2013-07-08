@@ -21,13 +21,39 @@
 
 #define HALO 8
 
-// For a halo of 8
-#define VALID_RESPONSES_X 80
-#define VALID_RESPONSES_Y 48
+#define HALO 8
 
-// For a halo of 4
+// For a halo of 1 (max filter size 3)
+//#define VALID_RESPONSES_X 94
+//#define VALID_RESPONSES_Y 62
+
+// For a halo of 2 (max filter size 5)
+//#define VALID_RESPONSES_X 92
+//#define VALID_RESPONSES_Y 60
+
+// For a halo of 3 (max filter size 7)
+//#define VALID_RESPONSES_X 90
+//#define VALID_RESPONSES_Y 58
+
+// For a halo of 4 (max filter size 9)
 //#define VALID_RESPONSES_X 88
 //#define VALID_RESPONSES_Y 56
+
+// For a halo of 5 (max filter size 11)
+//#define VALID_RESPONSES_X 86
+//#define VALID_RESPONSES_Y 54
+
+// For a halo of 6 (max filter size 13)
+//#define VALID_RESPONSES_X 84
+//#define VALID_RESPONSES_Y 52
+
+// For a halo of 7 (max filter size 15)
+//#define VALID_RESPONSES_X 82
+//#define VALID_RESPONSES_Y 50
+
+// For a halo of 8 (max filter size 17)
+#define VALID_RESPONSES_X 80
+#define VALID_RESPONSES_Y 48
 
 
 
