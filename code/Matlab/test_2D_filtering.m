@@ -68,4 +68,9 @@ shared_max = max(abs(filter_response_cpu(:) - filter_response_gpu_shared(:)))
 shared_unrolled_tot = sum(abs(filter_response_cpu(:) - filter_response_gpu_shared_unrolled(:)))
 shared_unrolled_max = max(abs(filter_response_cpu(:) - filter_response_gpu_shared_unrolled(:)))
 
+time_texture
+time_texture_unrolled
+time_shared
+time_shared_unrolled
+time_fft
 
