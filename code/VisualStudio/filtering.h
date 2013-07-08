@@ -21,8 +21,6 @@
 
 #define HALO 8
 
-#define HALO 8
-
 // For a halo of 1 (max filter size 3)
 //#define VALID_RESPONSES_X 94
 //#define VALID_RESPONSES_Y 62
